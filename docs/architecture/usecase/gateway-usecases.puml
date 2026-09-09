@@ -1,0 +1,23 @@
+@startuml gateway
+scale 2
+left to right direction
+actor Maintainer as mt
+actor Operator as op
+
+rectangle gateway {
+  usecase "Data transfer" as UC_Transfer
+  usecase "View gateway status" as UC_Status
+  usecase "View gateway data" as UC_Data
+  usecase "Trigger gateway functions" as UC_Functions
+  usecase "Configure gateway" as UC_Config
+}
+rectangle PLC
+rectangle Server 
+PLC <--> UC_Transfer
+Server <--> UC_Transfer
+mt --|> op
+op -- UC_Status
+op -- UC_Functions
+op -- UC_Data
+mt -- UC_Config
+@enduml

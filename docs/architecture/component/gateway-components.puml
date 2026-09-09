@@ -1,0 +1,11 @@
+@startuml gateway_components
+scale 2
+package "IoT Gateway Process" {
+  interface "IDataSourceAdapter" as IAdapter
+
+  [S7commAdapter] .up.|> IAdapter
+  [OpcUaAdapter] .up.|> IAdapter
+  [HTTP] .up.|> IAdapter
+  [HTTPS] .up.|> IAdapter
+}
+@enduml

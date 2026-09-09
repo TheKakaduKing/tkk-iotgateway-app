@@ -1,0 +1,13 @@
+@startuml device
+scale 2
+package "deployment of hardware"{
+node PLC <<device>>
+node Gateway <<device>>{
+    node openSTlinux <<execution environment>>
+}
+node Server <<device>>
+
+Gateway -- PLC
+Gateway - Server
+}
+@enduml
