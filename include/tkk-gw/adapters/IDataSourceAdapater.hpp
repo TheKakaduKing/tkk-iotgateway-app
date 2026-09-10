@@ -1,29 +1,29 @@
 #pragma once
+#include "types.hpp"
 #include <string>
 #include <variant>
 #include <vector>
 
 using S7type = std::variant<
-    bool,
-    int8_t,
-    u_int8_t,
-    int16_t,
-    u_int16_t,
-    int32_t,
-    u_int32_t,
-    int64_t,
-    u_int64_t,
-    float,
-    double,
+
     std::string,
+    bool,
+    i8,
+    u8,
+    i16,
+    u16,
+    i32,
+    u32,
+    f32,
+    f64,
     >;
 
 struct DataPoint
 {
-    std::string timestamp;
-    int id;
+    i32 id;
+    i32 Quality;
     S7type data;
-    int Quality;
+    std::string timestamp;
 };
 
 /**
@@ -38,4 +38,6 @@ public:
     virtual void getStatus() = 0;
     virtual std::vector<DataPoint> read() = 0;
     virtual void write() = 0;
+
+    virtual ~IDataSourceAdapter() {}
 };
