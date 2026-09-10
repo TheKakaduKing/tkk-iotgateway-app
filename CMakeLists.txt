@@ -18,10 +18,10 @@ set(SOURCES
     include/snap7micro/s7_peer.cpp
 )
 
-add_executable(s7_mpu_app ${SOURCES})
+add_executable(S7EmbeddedDriver ${SOURCES})
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(s7_mpu_app PRIVATE
+    target_compile_options(S7EmbeddedDriver PRIVATE
         # -fno-exceptions
         # -fno-enforce-eh-specs
         -fno-rtti
@@ -36,3 +36,8 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/../compile_commands.json")
         "${CMAKE_BINARY_DIR}/../compile_commands.json"
     )
 endif()
+
+target_include_directories(S7EmbeddedDriver 
+    PUBLIC 
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)

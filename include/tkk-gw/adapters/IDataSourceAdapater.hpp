@@ -33,9 +33,9 @@ struct DataPoint
 struct IDataSourceAdapter
 {
 public:
-    virtual void connect() = 0;
+    virtual void connect() const = 0;
     virtual void disconnect() = 0;
-    virtual void getStatus() = 0;
+    bool getConnectedState() const;
     virtual std::vector<DataPoint> read() = 0;
     virtual void write() = 0;
 
