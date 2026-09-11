@@ -16,6 +16,8 @@ set(SOURCES
     include/snap7micro/s7_isotcp.cpp
     include/snap7micro/s7_micro_client.cpp
     include/snap7micro/s7_peer.cpp
+    include/nlohmann/json.hpp
+    include/nlohmann/json_fwd.hpp
 )
 
 add_executable(S7EmbeddedDriver ${SOURCES})
