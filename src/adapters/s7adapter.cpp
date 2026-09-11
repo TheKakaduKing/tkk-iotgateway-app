@@ -1,8 +1,10 @@
 #include <fstream>
 #include "tkk-gw/adapters/s7adapter.hpp"
+#include "snap7micro/s7_types.h"
 
 S7Adapter::S7Adapter() : client{std::make_unique<TSnap7MicroClient>()},
-                         status{false}
+                         status{false},
+                         snap7Config{configureAdapter()}
 {
 }
 
@@ -37,11 +39,14 @@ void S7Adapter::parseConfigFile(std::ifstream &file_)
 }
 
 /**
- * @brief Interprets the config file
+ * @brief Config for snap7
  *
  */
-std::vector<ReadType, TagItem> S7Adapter::configureAdapter()
+S7Adapter::ReadConfig S7Adapter::configureAdapter()
 {
+    S7Adapter::ReadConfig configVector;
+    ReadType readType;
+
     const auto &con = configDataJson.at("connection");
     if (!con.contains("ip") || !con["ip"].is_string())
     {
@@ -51,15 +56,28 @@ std::vector<ReadType, TagItem> S7Adapter::configureAdapter()
     connectionConfig.rack = con.value("rack", 0);
     connectionConfig.slot = con.value("slot", 2);
 
+    if (configDataJson.contains("area"))
+    {
+        const auto &area = configDataJson.at("area");
+        readType.readArea = true;
+        readType.dbNumber = area.value("dbno", 0);
+        readType.offset = area.value("offset", 0);
+    }
+
     if (!configDataJson.contains("tags"))
     {
         return;
     }
+
     const auto &tags = configDataJson.at("tags");
+
+    configVector[0].first = readType;
+
     for (const auto &tag : tags)
     {
-        createTagItem(false, tag);
+        configVector[0].second.push_back(createTagItem(false, tag));
     }
+    return configVector;
 }
 
 TagItem S7Adapter::createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_)
@@ -212,6 +230,20 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
         return S7Type::COUNTER;
     }
     return S7Type::INVALID;
+}
+
+std::vector<DataPoint> S7Adapter::readData() const
+{
+    for (const auto &[r, i] : snap7Config)
+    {
+        if (r.readArea == true)
+        {
+            return;
+        }
+        if (r.readArea == false)
+        {
+        }
+    }
 }
 
 void S7Adapter::connect() const

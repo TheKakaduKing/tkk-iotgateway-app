@@ -75,11 +75,13 @@ struct S7Connection
  */
 class S7Adapter : public IDataSourceAdapter
 {
+    using ReadConfig = std::vector<std::pair<ReadType, std::vector<TagItem>>>;
 
 private:
     S7Connection connectionConfig{};
     std::unique_ptr<TSnap7MicroClient> client;
     bool status{false};
+    ReadConfig snap7Config;
     nlohmann::json configDataJson;
 
     void connect() const override;
@@ -90,7 +92,7 @@ private:
 
     void openConfigFile(const std::string &path_);
     void parseConfigFile(std::ifstream &file_);
-    std::vector<ReadType, TagItem> configureAdapter();
+    ReadConfig configureAdapter();
     TagItem createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_);
     Target parseTarget(const std::string &target_);
     S7Type parseS7Type(const std::string &type_);
