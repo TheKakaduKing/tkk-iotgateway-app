@@ -18,9 +18,9 @@ private:
     bool status;
 
     void connect() const override;
-    void disconnect() const;
-    bool getConnectedState() const;
-    std::vector<DataPoint> read() const;
+    void disconnect() const override;
+    bool getConnectedState() const override;
+    std::vector<DataPoint> readData() const;
     void write() const;
 
 public:

@@ -19,6 +19,12 @@ void S7Adapter::connect() const
     result = this->client->ConnectTo(this->ip, this->rack, this->slot);
 }
 
+void S7Adapter::disconnect() const
+{
+    int result;
+    result = this->client->Disconnect();
+}
+
 bool S7Adapter::getConnectedState() const
 {
     return client->Connected;
