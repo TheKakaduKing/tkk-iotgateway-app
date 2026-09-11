@@ -5,7 +5,7 @@
 #include <vector>
 #include <chrono>
 
-using S7type = std::variant<
+using GenericType = std::variant<
 
     std::string,
     bool,
@@ -23,7 +23,7 @@ struct DataPoint
 {
     i32 id;
     i32 Quality;
-    S7type data;
+    GenericType data;
     std::chrono::system_clock::time_point timestamp;
 };
 
@@ -37,8 +37,8 @@ public:
     virtual void connect() const = 0;
     virtual void disconnect() const = 0;
     virtual bool getConnectedState() const;
-    virtual std::vector<DataPoint> readData() = 0;
-    virtual void writeData() = 0;
+    virtual std::vector<DataPoint> readData() const = 0;
+    virtual void writeData() const = 0;
 
     virtual ~IDataSourceAdapter() {}
 };
