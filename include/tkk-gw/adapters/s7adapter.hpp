@@ -71,12 +71,16 @@ struct TagItem
     u8 bit{0};
 };
 
-struct ReadType
+struct ReadHeader
 {
     ReadMode mode{ReadMode::SINGLE};
     AreaTarget target{AreaTarget::DB};
     u32 offset{0};
     u32 amount{0};
+
+    int requestPduSize{0};
+    int responsePduSize{0};
+    size_t itemCount{0};
 };
 
 struct S7Connection
@@ -92,7 +96,7 @@ struct S7Connection
  */
 class S7Adapter : public IDataSourceAdapter
 {
-    using ReadConfigItem = std::pair<ReadType, std::vector<TagItem>>;
+    using ReadConfigItem = std::pair<ReadHeader, std::vector<TagItem>>;
     using ReadConfig = std::vector<ReadConfigItem>;
 
 private:
@@ -111,7 +115,7 @@ private:
 
     std::ifstream openConfigFile();
     void parseConfigFile();
-    ReadConfig configureAdapter();
+    void configureAdapter();
     TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
     Target parseTarget(const std::string &target_);
     AreaTarget parseAreaTarget(const std::string &areaTarget_);
@@ -120,8 +124,13 @@ private:
     void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
     std::vector<ReadConfigItem> createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
+    ReadConfig createReadConfig();
+
+    void DBG_printConfigElements();
 
 public:
+    void init();
+
     S7Adapter(const std::string &configPath_);
     ~S7Adapter();
 };

@@ -7,13 +7,22 @@ S7Adapter::S7Adapter(const std::string &configPath_) : client{std::make_unique<T
                                                        status{false},
                                                        configPath{configPath_}
 {
-    snap7Config = configureAdapter();
-    connect();
 }
 
 S7Adapter::~S7Adapter()
 {
     client->Disconnect();
+}
+
+void S7Adapter::init()
+{
+    configureAdapter();
+    connect();
+    if (client->PDULength > 0)
+    {
+        snap7Config = createReadConfig();
+        DBG_printConfigElements();
+    }
 }
 
 /**
@@ -27,8 +36,9 @@ std::ifstream S7Adapter::openConfigFile()
     if (!file.is_open())
     {
         std::cout << "Error opening config file" << std::endl;
-        return;
+        exit;
     }
+    return file;
 }
 
 /**
@@ -73,7 +83,7 @@ void S7Adapter::setupConnConfig()
 S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_)
 {
     ReadConfigItem tempConfigItem{};
-    ReadType tempReadType{};
+    ReadHeader tempReadType{};
 
     tempReadType.mode = ReadMode::AREA;
     tempReadType.target = parseAreaTarget(block_.at("target").get<std::string>());
@@ -89,6 +99,7 @@ S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::js
         tempConfigItem.second.push_back(createTagItem(tempConfigItem.first.mode, tag));
     }
 
+    std::cout << "AreaRead config created" << std::endl;
     return tempConfigItem;
 }
 
@@ -103,9 +114,9 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
     std::vector<ReadConfigItem> readConfigItemMemory{};
     ReadConfigItem tempConfigItem{}, tempConfigItemRef{};
     TagItem tempTagItem{};
-    ReadType tempReadType{};
-    int currentItemSize{0}, currentPduSize{12};
-    size_t currentItemCount{0}, maxItemCount{(client->PDULength - 12) / 12};
+    ReadHeader tempReadType{};
+    int currentItemSize{0}, currentPduSize{14}, finalPduSize{0}, maxItemCount{(client->PDULength - 12) / 12};
+    size_t currentItemCount{0}, finalItemCount{0};
 
     const auto &tags = block_.at("tags");
 
@@ -118,19 +129,36 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
             currentItemSize += 1; // Must be 2 byte aligned
         }
 
-        currentPduSize += currentItemSize;
-
-        if (currentPduSize > client->PDULength || currentItemCount >= maxItemCount)
+        if (currentPduSize + currentItemSize > client->PDULength || currentItemCount >= maxItemCount)
         {
+            tempConfigItem.first.requestPduSize = 12 + (currentItemCount * 12);
+            tempConfigItem.first.responsePduSize = currentPduSize;
+            tempConfigItem.first.itemCount = currentItemCount;
             readConfigItemMemory.push_back(tempConfigItem);
             tempConfigItem = tempConfigItemRef; // Empty tempConfigItem
 
-            currentPduSize = 12 + currentItemSize;
+            finalPduSize += currentPduSize;
+            currentPduSize = 14;
+            finalItemCount += currentItemCount;
             currentItemCount = 0;
         }
+        currentPduSize += currentItemSize;
         currentItemCount++;
         tempConfigItem.second.push_back(tempTagItem);
     }
+
+    if (tempConfigItem.second.size() > 0)
+    {
+        tempConfigItem.first.requestPduSize = 12 + (currentItemCount * 12);
+        tempConfigItem.first.responsePduSize = currentPduSize;
+        tempConfigItem.first.itemCount = currentItemCount;
+        finalPduSize += currentPduSize;
+        finalItemCount += currentItemCount;
+        readConfigItemMemory.push_back(tempConfigItem);
+    }
+    std::cout << "DEBUG Final resoponse payload size:       " << finalPduSize << std::endl;
+    std::cout << "DEBUG Final Item count:     " << finalItemCount << std::endl;
+
     return readConfigItemMemory;
 }
 
@@ -138,19 +166,23 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
  * @brief Config for snap7
  *
  */
-S7Adapter::ReadConfig S7Adapter::configureAdapter()
+void S7Adapter::configureAdapter()
 {
     parseConfigFile();
     setupConnConfig();
+}
 
+S7Adapter::ReadConfig S7Adapter::createReadConfig()
+{
     S7Adapter::ReadConfig configVector{};
-    ReadType readType;
+    ReadHeader readType;
     const auto &blocks = configDataJson.at("read");
 
     for (const auto &b : blocks)
     {
         if (b.at("mode").get<std::string>() == "area")
         {
+            std::cout << "Start config for area read" << std::endl;
             configVector.push_back(createAreaReadConfigItem(b));
             continue;
         }
@@ -443,4 +475,41 @@ void S7Adapter::disconnect() const
 bool S7Adapter::getConnectedState() const
 {
     return client->Connected;
+}
+
+void S7Adapter::DBG_printConfigElements()
+{
+    using namespace std;
+    cout << "Amount of Read configs:     " << snap7Config.size() << endl;
+    for (const auto &i : snap7Config)
+    {
+
+        cout << endl;
+        cout << endl;
+        cout << "<---New config--->" << endl;
+        cout << "mode:      ";
+        (i.first.mode == ReadMode::AREA) ? cout << "AREA" : cout << "SIGNLE";
+        cout << endl;
+        cout << "target:    " << int(i.first.target) << endl;
+        cout << "offset:    " << i.first.offset << endl;
+        cout << "amount:    " << i.first.amount << endl;
+        cout << "req pdu:   " << i.first.requestPduSize << endl;
+        cout << "res pdu:   " << i.first.responsePduSize << endl;
+        cout << "items:     " << i.first.itemCount << endl;
+        cout << endl;
+        cout << "<--Tags-->" << endl;
+        cout << endl;
+        for (const auto &t : i.second)
+        {
+            cout << endl;
+            cout << "<-Tag->" << endl;
+            cout << "id:       " << t.id << endl;
+            cout << "name:     " << t.name << endl;
+            cout << "target:   " << int(t.target) << endl;
+            cout << "dbNumber: " << t.dbNumber << endl;
+            cout << "offset:   " << t.offset << endl;
+            cout << "type:     " << int(t.type) << endl;
+            cout << "bit:      " << int(t.bit) << endl;
+        }
+    }
 }
