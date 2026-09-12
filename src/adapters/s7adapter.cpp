@@ -65,6 +65,76 @@ void S7Adapter::setupConnConfig()
 }
 
 /**
+ * @brief Create readconfig for snap7 area reads
+ *
+ * @param block_
+ * @return S7Adapter::ReadConfigItem
+ */
+S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_)
+{
+    ReadConfigItem tempConfigItem{};
+    ReadType tempReadType{};
+
+    tempReadType.mode = ReadMode::AREA;
+    tempReadType.target = parseAreaTarget(block_.at("target").get<std::string>());
+    tempReadType.offset = block_.at("offset").get<u32>();
+    tempReadType.amount = block_.at("amount").get<u32>();
+
+    tempConfigItem.first = tempReadType;
+
+    const auto &tags = block_.at("tags");
+
+    for (const auto &tag : tags)
+    {
+        tempConfigItem.second.push_back(createTagItem(tempConfigItem.first.mode, tag));
+    }
+
+    return tempConfigItem;
+}
+
+/**
+ * @brief Create readconfig for snap7 multivar reads
+ *
+ * @param block_
+ * @return S7Adapter::ReadConfigItem
+ */
+std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_)
+{
+    std::vector<ReadConfigItem> readConfigItemMemory{};
+    ReadConfigItem tempConfigItem{}, tempConfigItemRef{};
+    TagItem tempTagItem{};
+    ReadType tempReadType{};
+    int currentItemSize{0}, currentPduSize{12};
+    size_t currentItemCount{0}, maxItemCount{(client->PDULength - 12) / 12};
+
+    const auto &tags = block_.at("tags");
+
+    for (const auto &tag : tags)
+    {
+        tempTagItem = createTagItem(tempConfigItem.first.mode, tag);
+        currentItemSize = 4 + getTypeSize(tempTagItem.type);
+        if (currentItemSize % 2 != 0)
+        {
+            currentItemSize += 1; // Must be 2 byte aligned
+        }
+
+        currentPduSize += currentItemSize;
+
+        if (currentPduSize > client->PDULength || currentItemCount >= maxItemCount)
+        {
+            readConfigItemMemory.push_back(tempConfigItem);
+            tempConfigItem = tempConfigItemRef; // Empty tempConfigItem
+
+            currentPduSize = 12 + currentItemSize;
+            currentItemCount = 0;
+        }
+        currentItemCount++;
+        tempConfigItem.second.push_back(tempTagItem);
+    }
+    return readConfigItemMemory;
+}
+
+/**
  * @brief Config for snap7
  *
  */
@@ -75,87 +145,24 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
 
     S7Adapter::ReadConfig configVector{};
     ReadType readType;
+    const auto &blocks = configDataJson.at("read");
 
-    std::cout << "Start configuration" << std::endl;
-
-    if (configDataJson.contains("area"))
+    for (const auto &b : blocks)
     {
-        const auto &area = configDataJson.at("area");
-        readType.readArea = true;
-        readType.dbNumber = area.value("dbno", 0);
-        readType.offset = area.value("offset", 0);
-    }
-
-    if (!configDataJson.contains("tags"))
-    {
-        return configVector;
-    }
-
-    const auto &tags = configDataJson.at("tags");
-
-    std::cout << "Start reading tags..." << std::endl;
-
-    size_t v{0}, maxItemCount{client->PDULength / 12}, currentItemCount{0};
-    int currentPduSize{0}, currentItemSize{0};
-    TagItem tempTagItem{};
-
-    maxItemCount = 19;
-    client->PDULength = 64;
-
-    std::pair tempPair{readType, std::vector<TagItem>{}};
-    configVector.push_back(tempPair);
-
-    // std::cout << std::endl;
-    // std::cout << "New index created..." << std::endl;
-    // std::cout << "Area: " << configVector[v].first.readArea << std::endl;
-    // std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
-    // std::cout << "Offset: " << configVector[v].first.offset << std::endl;
-
-    for (const auto &tag : tags)
-    {
-        tempTagItem = createTagItem(configVector[v].first.readArea, tag);
-        if (!configVector[v].first.readArea)
+        if (b.at("mode").get<std::string>() == "area")
         {
-            currentItemSize = 4 + getTypeSize(tempTagItem.type);
-            if (currentItemSize % 2 != 0)
-            {
-                currentItemSize++; // Must be 2 byte aligned
-            }
-
-            currentPduSize += currentItemSize;
-
-            if (currentPduSize > client->PDULength || currentItemCount >= maxItemCount)
-            {
-                configVector.push_back(tempPair);
-                v++; // Setup new ReadMultiVar request
-                configVector[v].first = readType;
-                // std::cout << std::endl;
-                // std::cout << "New index created..." << std::endl;
-                // std::cout << "Area: " << configVector[v].first.readArea << std::endl;
-                // std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
-                // std::cout << "Offset: " << configVector[v].first.offset << std::endl;
-                currentPduSize = 12 + currentItemSize;
-                currentItemCount = 0;
-            }
-            // std::cout << std::endl;
-            // std::cout << "Current pdu size: " << currentPduSize << std::endl;
-            // std::cout << "Current item count: " << currentItemCount << std::endl;
-            // std::cout << "Current item size: " << currentItemSize << std::endl;
-            // std::cout << "Vector index: " << v << std::endl;
-            // std::cout << "Max item count: " << maxItemCount << std::endl;
-            // std::cout << "Snap7 max pdu size: " << client->PDULength << std::endl;
-            currentItemCount++;
+            configVector.push_back(createAreaReadConfigItem(b));
+            continue;
         }
-        // std::cout << std::endl;
-        // std::cout << "Created new Tag: " << tempTagItem.id << std::endl;
-        // std::cout << "id: " << tempTagItem.id << std::endl;
-        // std::cout << "name: " << tempTagItem.name << std::endl;
-        // std::cout << "target: " << int(tempTagItem.target) << std::endl;
-        // std::cout << "db: " << tempTagItem.dbNumber << std::endl;
-        // std::cout << "offset: " << tempTagItem.offset << std::endl;
-        // std::cout << "type: " << int(tempTagItem.type) << std::endl;
-        // std::cout << "bit: " << int(tempTagItem.bit) << std::endl;
-        configVector[v].second.push_back(tempTagItem);
+        if (b.at("mode").get<std::string>() == "single")
+        {
+            const auto &readConfigItemMemory = createSingleReadConfigItem(b);
+            for (const auto &config : readConfigItemMemory)
+            {
+                configVector.push_back(config);
+            }
+            continue;
+        }
     }
     return configVector;
 }
@@ -214,13 +221,13 @@ int S7Adapter::getTypeSize(S7Type type_)
     }
 }
 
-TagItem S7Adapter::createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_)
+TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_)
 {
     TagItem item{};
     item.id = tag_.value("id", 0);
     item.name = tag_.value("name", "unknown");
 
-    if (!readArea_)
+    if (mode_ == ReadMode::SINGLE)
     {
         item.target = parseTarget(tag_.value("target", "unknownTarget"));
     }
@@ -271,6 +278,27 @@ Target S7Adapter::parseTarget(const std::string &target_)
         return Target::ARRAY;
     }
     return Target::INVALID;
+}
+
+AreaTarget S7Adapter::parseAreaTarget(const std::string &areaTarget_)
+{
+    if (areaTarget_ == "db")
+    {
+        return AreaTarget::DB;
+    }
+    if (areaTarget_ == "e")
+    {
+        return AreaTarget::INPUT;
+    }
+    if (areaTarget_ == "a")
+    {
+        return AreaTarget::OUTPUT;
+    }
+    if (areaTarget_ == "m")
+    {
+        return AreaTarget::MERKER;
+    }
+    return AreaTarget::INVALID;
 }
 
 S7Type S7Adapter::parseS7Type(const std::string &type_)
@@ -375,11 +403,11 @@ std::vector<DataPoint> S7Adapter::readData() const
     std::vector<DataPoint> dataVector;
     for (const auto &[r, i] : snap7Config)
     {
-        if (r.readArea == true)
+        if (r.mode == ReadMode::AREA)
         {
             return dataVector;
         }
-        if (r.readArea == false)
+        if (r.mode == ReadMode::SINGLE)
         {
         }
     }
@@ -388,10 +416,6 @@ std::vector<DataPoint> S7Adapter::readData() const
 void S7Adapter::writeData() const
 {
     return;
-}
-
-void S7Adapter::splitMultiVarReq()
-{
 }
 
 void S7Adapter::connect() const

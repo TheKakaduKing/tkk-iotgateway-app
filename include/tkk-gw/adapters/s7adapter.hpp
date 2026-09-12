@@ -17,6 +17,15 @@ enum class Target
     INVALID,
 };
 
+enum class AreaTarget
+{
+    DB,
+    INPUT,
+    OUTPUT,
+    MERKER,
+    INVALID,
+};
+
 enum class S7Type
 {
     BOOL,
@@ -45,6 +54,12 @@ enum class S7Type
     INVALID,
 };
 
+enum class ReadMode
+{
+    SINGLE,
+    AREA
+};
+
 struct TagItem
 {
     u32 id{0};
@@ -58,9 +73,10 @@ struct TagItem
 
 struct ReadType
 {
-    bool readArea{false};
-    u32 dbNumber{0};
+    ReadMode mode{ReadMode::SINGLE};
+    AreaTarget target{AreaTarget::DB};
     u32 offset{0};
+    u32 amount{0};
 };
 
 struct S7Connection
@@ -76,7 +92,8 @@ struct S7Connection
  */
 class S7Adapter : public IDataSourceAdapter
 {
-    using ReadConfig = std::vector<std::pair<ReadType, std::vector<TagItem>>>;
+    using ReadConfigItem = std::pair<ReadType, std::vector<TagItem>>;
+    using ReadConfig = std::vector<ReadConfigItem>;
 
 private:
     S7Connection connectionConfig{};
@@ -95,12 +112,14 @@ private:
     std::ifstream openConfigFile();
     void parseConfigFile();
     ReadConfig configureAdapter();
-    TagItem createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_);
+    TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
     Target parseTarget(const std::string &target_);
+    AreaTarget parseAreaTarget(const std::string &areaTarget_);
     S7Type parseS7Type(const std::string &type_);
-    void splitMultiVarReq();
     int getTypeSize(S7Type type_);
     void setupConnConfig();
+    ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
+    std::vector<ReadConfigItem> createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
 
 public:
     S7Adapter(const std::string &configPath_);
