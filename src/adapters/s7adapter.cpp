@@ -87,6 +87,7 @@ S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::js
 
     tempReadType.mode = ReadMode::AREA;
     tempReadType.target = parseAreaTarget(block_.at("target").get<std::string>());
+    tempReadType.dbNumber = block_.at("dbno").get<u32>();
     tempReadType.offset = block_.at("offset").get<u32>();
     tempReadType.amount = block_.at("amount").get<u32>();
 
@@ -115,8 +116,8 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
     ReadConfigItem tempConfigItem{}, tempConfigItemRef{};
     TagItem tempTagItem{};
     ReadHeader tempReadType{};
-    int currentItemSize{0}, currentPduSize{14}, finalPduSize{0}, maxItemCount{(client->PDULength - 12) / 12};
-    size_t currentItemCount{0}, finalItemCount{0};
+    int currentItemSize{0}, currentPduSize{14}, maxItemCount{(client->PDULength - 12) / 12};
+    size_t currentItemCount{0};
 
     const auto &tags = block_.at("tags");
 
@@ -137,9 +138,7 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
             readConfigItemMemory.push_back(tempConfigItem);
             tempConfigItem = tempConfigItemRef; // Empty tempConfigItem
 
-            finalPduSize += currentPduSize;
             currentPduSize = 14;
-            finalItemCount += currentItemCount;
             currentItemCount = 0;
         }
         currentPduSize += currentItemSize;
@@ -152,12 +151,8 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
         tempConfigItem.first.requestPduSize = 12 + (currentItemCount * 12);
         tempConfigItem.first.responsePduSize = currentPduSize;
         tempConfigItem.first.itemCount = currentItemCount;
-        finalPduSize += currentPduSize;
-        finalItemCount += currentItemCount;
         readConfigItemMemory.push_back(tempConfigItem);
     }
-    std::cout << "DEBUG Final resoponse payload size:       " << finalPduSize << std::endl;
-    std::cout << "DEBUG Final Item count:     " << finalItemCount << std::endl;
 
     return readConfigItemMemory;
 }

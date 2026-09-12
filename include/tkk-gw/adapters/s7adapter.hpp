@@ -75,6 +75,7 @@ struct ReadHeader
 {
     ReadMode mode{ReadMode::SINGLE};
     AreaTarget target{AreaTarget::DB};
+    u32 dbNumber{0};
     u32 offset{0};
     u32 amount{0};
 
