@@ -92,14 +92,15 @@ private:
     std::vector<DataPoint> readData() const override;
     void writeData() const override;
 
-    void openConfigFile();
-    void parseConfigFile(std::ifstream &file_);
+    std::ifstream openConfigFile();
+    void parseConfigFile();
     ReadConfig configureAdapter();
     TagItem createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_);
     Target parseTarget(const std::string &target_);
     S7Type parseS7Type(const std::string &type_);
     void splitMultiVarReq();
     int getTypeSize(S7Type type_);
+    void setupConnConfig();
 
 public:
     S7Adapter(const std::string &configPath_);

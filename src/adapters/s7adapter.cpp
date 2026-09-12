@@ -8,6 +8,7 @@ S7Adapter::S7Adapter(const std::string &configPath_) : client{std::make_unique<T
                                                        configPath{configPath_}
 {
     snap7Config = configureAdapter();
+    connect();
 }
 
 S7Adapter::~S7Adapter()
@@ -20,16 +21,14 @@ S7Adapter::~S7Adapter()
  *
  * @param path_
  */
-void S7Adapter::openConfigFile()
+std::ifstream S7Adapter::openConfigFile()
 {
     std::ifstream file(configPath); // std::ifstream is RAII -> closes itself when leaving scope
     if (!file.is_open())
     {
-        std::cout << "Error open config file" << std::endl;
+        std::cout << "Error opening config file" << std::endl;
         return;
     }
-    std::cout << "Config file opened" << std::endl;
-    parseConfigFile(file);
 }
 
 /**
@@ -37,31 +36,23 @@ void S7Adapter::openConfigFile()
  *
  * @param file_
  */
-void S7Adapter::parseConfigFile(std::ifstream &file_)
+void S7Adapter::parseConfigFile()
 {
-
+    std::ifstream file{openConfigFile()};
     std::cout << "Parsing config file" << std::endl;
-    configDataJson = nlohmann::json::parse(file_, nullptr, true); // Exceptions alloewd for now for testing
+    configDataJson = nlohmann::json::parse(file, nullptr, true); // Exceptions alloewd for now for testing
 }
 
 /**
- * @brief Config for snap7
+ * @brief Setup connection params
  *
  */
-S7Adapter::ReadConfig S7Adapter::configureAdapter()
+void S7Adapter::setupConnConfig()
 {
-    openConfigFile();
-    std::cout << "Parsing config file finished" << std::endl;
-
-    S7Adapter::ReadConfig configVector{};
-    ReadType readType;
-
-    std::cout << "Start configuration" << std::endl;
-
     const auto &con = configDataJson.at("connection");
     if (!con.contains("ip") || !con["ip"].is_string())
     {
-        return configVector;
+        return;
     }
     connectionConfig.ip = con.at("ip").get<std::string>();
     connectionConfig.rack = con.value("rack", 0);
@@ -71,6 +62,21 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
     std::cout << "IP: " << connectionConfig.ip << std::endl;
     std::cout << "Rack: " << connectionConfig.rack << std::endl;
     std::cout << "Slot: " << connectionConfig.slot << std::endl;
+}
+
+/**
+ * @brief Config for snap7
+ *
+ */
+S7Adapter::ReadConfig S7Adapter::configureAdapter()
+{
+    parseConfigFile();
+    setupConnConfig();
+
+    S7Adapter::ReadConfig configVector{};
+    ReadType readType;
+
+    std::cout << "Start configuration" << std::endl;
 
     if (configDataJson.contains("area"))
     {
@@ -99,11 +105,11 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
     std::pair tempPair{readType, std::vector<TagItem>{}};
     configVector.push_back(tempPair);
 
-    std::cout << std::endl;
-    std::cout << "New index created..." << std::endl;
-    std::cout << "Area: " << configVector[v].first.readArea << std::endl;
-    std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
-    std::cout << "Offset: " << configVector[v].first.offset << std::endl;
+    // std::cout << std::endl;
+    // std::cout << "New index created..." << std::endl;
+    // std::cout << "Area: " << configVector[v].first.readArea << std::endl;
+    // std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
+    // std::cout << "Offset: " << configVector[v].first.offset << std::endl;
 
     for (const auto &tag : tags)
     {
@@ -123,32 +129,32 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
                 configVector.push_back(tempPair);
                 v++; // Setup new ReadMultiVar request
                 configVector[v].first = readType;
-                std::cout << std::endl;
-                std::cout << "New index created..." << std::endl;
-                std::cout << "Area: " << configVector[v].first.readArea << std::endl;
-                std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
-                std::cout << "Offset: " << configVector[v].first.offset << std::endl;
+                // std::cout << std::endl;
+                // std::cout << "New index created..." << std::endl;
+                // std::cout << "Area: " << configVector[v].first.readArea << std::endl;
+                // std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
+                // std::cout << "Offset: " << configVector[v].first.offset << std::endl;
                 currentPduSize = 12 + currentItemSize;
                 currentItemCount = 0;
             }
-            std::cout << std::endl;
-            std::cout << "Current pdu size: " << currentPduSize << std::endl;
-            std::cout << "Current item count: " << currentItemCount << std::endl;
-            std::cout << "Current item size: " << currentItemSize << std::endl;
-            std::cout << "Vector index: " << v << std::endl;
-            std::cout << "Max item count: " << maxItemCount << std::endl;
-            std::cout << "Snap7 max pdu size: " << client->PDULength << std::endl;
+            // std::cout << std::endl;
+            // std::cout << "Current pdu size: " << currentPduSize << std::endl;
+            // std::cout << "Current item count: " << currentItemCount << std::endl;
+            // std::cout << "Current item size: " << currentItemSize << std::endl;
+            // std::cout << "Vector index: " << v << std::endl;
+            // std::cout << "Max item count: " << maxItemCount << std::endl;
+            // std::cout << "Snap7 max pdu size: " << client->PDULength << std::endl;
             currentItemCount++;
         }
-        std::cout << std::endl;
-        std::cout << "Created new Tag: " << tempTagItem.id << std::endl;
-        std::cout << "id: " << tempTagItem.id << std::endl;
-        std::cout << "name: " << tempTagItem.name << std::endl;
-        std::cout << "target: " << int(tempTagItem.target) << std::endl;
-        std::cout << "db: " << tempTagItem.dbNumber << std::endl;
-        std::cout << "offset: " << tempTagItem.offset << std::endl;
-        std::cout << "type: " << int(tempTagItem.type) << std::endl;
-        std::cout << "bit: " << int(tempTagItem.bit) << std::endl;
+        // std::cout << std::endl;
+        // std::cout << "Created new Tag: " << tempTagItem.id << std::endl;
+        // std::cout << "id: " << tempTagItem.id << std::endl;
+        // std::cout << "name: " << tempTagItem.name << std::endl;
+        // std::cout << "target: " << int(tempTagItem.target) << std::endl;
+        // std::cout << "db: " << tempTagItem.dbNumber << std::endl;
+        // std::cout << "offset: " << tempTagItem.offset << std::endl;
+        // std::cout << "type: " << int(tempTagItem.type) << std::endl;
+        // std::cout << "bit: " << int(tempTagItem.bit) << std::endl;
         configVector[v].second.push_back(tempTagItem);
     }
     return configVector;
@@ -390,8 +396,18 @@ void S7Adapter::splitMultiVarReq()
 
 void S7Adapter::connect() const
 {
+    std::cout << std::endl;
+    std::cout << "Connecting to PLC..." << std::endl;
     int result;
     result = client->ConnectTo(connectionConfig.ip.c_str(), connectionConfig.rack, connectionConfig.slot);
+    if (client->Connected)
+    {
+        std::cout << "Connected to PLC on IP: " << connectionConfig.ip << std::endl;
+        std::cout << "Negotiated PDU size   : " << client->PDULength << std::endl;
+        return;
+    }
+
+    std::cout << "Connecting failed... result: " << result << std::endl;
 }
 
 void S7Adapter::disconnect() const
