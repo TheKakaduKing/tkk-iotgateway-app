@@ -50,7 +50,7 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
     const auto &con = configDataJson.at("connection");
     if (!con.contains("ip") || !con["ip"].is_string())
     {
-        return;
+        return configVector;
     }
     connectionConfig.ip = con.at("ip").get<std::string>();
     connectionConfig.rack = con.value("rack", 0);
@@ -66,7 +66,7 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
 
     if (!configDataJson.contains("tags"))
     {
-        return;
+        return configVector;
     }
 
     const auto &tags = configDataJson.at("tags");
@@ -312,16 +312,22 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
 
 std::vector<DataPoint> S7Adapter::readData() const
 {
+    std::vector<DataPoint> dataVector;
     for (const auto &[r, i] : snap7Config)
     {
         if (r.readArea == true)
         {
-            return;
+            return dataVector;
         }
         if (r.readArea == false)
         {
         }
     }
+}
+
+void S7Adapter::writeData() const
+{
+    return;
 }
 
 void S7Adapter::splitMultiVarReq()

@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include "types.hpp"
+#include "tkk-gw/types.hpp"
 #include "IDataSourceAdapater.hpp"
 #include "snap7micro/s7_micro_client.h"
 #include "nlohmann/json.hpp"

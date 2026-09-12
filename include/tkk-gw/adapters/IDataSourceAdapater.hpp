@@ -1,5 +1,5 @@
 #pragma once
-#include "types.hpp"
+#include "tkk-gw/types.hpp"
 #include <string>
 #include <variant>
 #include <vector>
@@ -16,8 +16,7 @@ using GenericType = std::variant<
     i32,
     u32,
     f32,
-    f64,
-    >;
+    f64>;
 
 struct DataPoint
 {

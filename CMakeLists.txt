@@ -10,6 +10,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(SOURCES
     src/main.cpp
+    src/adapters/s7adapter.cpp
     include/snap7micro/snap_msgsock.cpp
     include/snap7micro/snap_sysutils.cpp
     include/snap7micro/s7_micro_client.cpp
