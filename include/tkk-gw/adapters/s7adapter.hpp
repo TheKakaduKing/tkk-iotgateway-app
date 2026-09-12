@@ -23,6 +23,7 @@ enum class S7Type
     BYTE,
     WORD,
     DWORD,
+    LWORD,
     SINT,
     INT,
     DINT,
@@ -96,6 +97,8 @@ private:
     TagItem createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_);
     Target parseTarget(const std::string &target_);
     S7Type parseS7Type(const std::string &type_);
+    void splitMultiVarReq();
+    int getTypeSize(S7Type type_);
 
 public:
     S7Adapter();

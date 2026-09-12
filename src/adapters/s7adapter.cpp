@@ -73,11 +73,85 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
 
     configVector[0].first = readType;
 
+    size_t v{0}, maxItemCount{client->PDULength / 12}, currentItemCount{0};
+    int currentPduSize{0}, currentItemSize{0};
+    TagItem tempTagItem{};
     for (const auto &tag : tags)
     {
-        configVector[0].second.push_back(createTagItem(false, tag));
+        tempTagItem = createTagItem(configVector[v].first.readArea, tag);
+        if (!configVector[v].first.readArea)
+        {
+            currentItemSize = 4 + getTypeSize(tempTagItem.type);
+            if (currentItemSize % 2 != 0)
+            {
+                currentItemSize++; // Must be 2 byte aligned
+            }
+
+            if (currentPduSize + currentItemSize > client->PDULength || currentItemCount >= maxItemCount)
+            {
+                v++; // Setup new ReadMultiVar request
+                configVector[v].first = readType;
+                currentPduSize = 0 + currentItemSize;
+            }
+            currentItemCount++;
+        }
+        configVector[v].second.push_back(tempTagItem);
     }
     return configVector;
+}
+
+/**
+ * @brief Return S7 type size in byte
+ *
+ * @param type_
+ * @return int
+ */
+int S7Adapter::getTypeSize(S7Type type_)
+{
+    switch (type_)
+    {
+    case S7Type::BOOL:
+    case S7Type::BYTE:
+    case S7Type::SINT:
+    case S7Type::USINT:
+    case S7Type::CHAR:
+    {
+        return 1;
+        break;
+    }
+    case S7Type::WORD:
+    case S7Type::INT:
+    case S7Type::UINT:
+    case S7Type::WCHAR:
+    case S7Type::S5TIME:
+    {
+        return 2;
+        break;
+    }
+    case S7Type::DWORD:
+    case S7Type::DINT:
+    case S7Type::UDINT:
+    case S7Type::REAL:
+    case S7Type::TIME:
+    case S7Type::TIMER:
+    case S7Type::COUNTER:
+    {
+        return 4;
+        break;
+    }
+    case S7Type::LWORD:
+    case S7Type::LINT:
+    case S7Type::ULINT:
+    case S7Type::LREAL:
+    case S7Type::LTIME:
+    {
+        return 8;
+        break;
+    }
+    default:
+        return 99;
+        break;
+    }
 }
 
 TagItem S7Adapter::createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_)
@@ -156,6 +230,10 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
     if (type_ == "DWORD")
     {
         return S7Type::DWORD;
+    }
+    if (type_ == "LWORD")
+    {
+        return S7Type::LWORD;
     }
     if (type_ == "SINT")
     {
@@ -244,6 +322,10 @@ std::vector<DataPoint> S7Adapter::readData() const
         {
         }
     }
+}
+
+void S7Adapter::splitMultiVarReq()
+{
 }
 
 void S7Adapter::connect() const
