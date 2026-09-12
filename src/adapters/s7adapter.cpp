@@ -83,15 +83,15 @@ void S7Adapter::setupConnConfig()
 S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_)
 {
     ReadConfigItem tempConfigItem{};
-    ReadHeader tempReadType{};
+    ReadHeader tempReadHeader{};
 
-    tempReadType.mode = ReadMode::AREA;
-    tempReadType.target = parseAreaTarget(block_.at("target").get<std::string>());
-    tempReadType.dbNumber = block_.at("dbno").get<u32>();
-    tempReadType.offset = block_.at("offset").get<u32>();
-    tempReadType.amount = block_.at("amount").get<u32>();
+    tempReadHeader.mode = ReadMode::AREA;
+    tempReadHeader.target = cvrtTargetToSnap7Area(block_.at("target").get<std::string>());
+    tempReadHeader.dbNumber = block_.at("dbno").get<u32>();
+    tempReadHeader.offset = block_.at("offset").get<u32>();
+    tempReadHeader.amount = block_.at("amount").get<u32>();
 
-    tempConfigItem.first = tempReadType;
+    tempConfigItem.first = tempReadHeader;
 
     const auto &tags = block_.at("tags");
 
@@ -115,7 +115,7 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
     std::vector<ReadConfigItem> readConfigItemMemory{};
     ReadConfigItem tempConfigItem{}, tempConfigItemRef{};
     TagItem tempTagItem{};
-    ReadHeader tempReadType{};
+    ReadHeader tempReadHeader{};
     int currentItemSize{0}, currentPduSize{14}, maxItemCount{(client->PDULength - 12) / 12};
     size_t currentItemCount{0};
 
@@ -170,7 +170,7 @@ void S7Adapter::configureAdapter()
 S7Adapter::ReadConfig S7Adapter::createReadConfig()
 {
     S7Adapter::ReadConfig configVector{};
-    ReadHeader readType;
+    ReadHeader ReadHeader;
     const auto &blocks = configDataJson.at("read");
 
     for (const auto &b : blocks)
@@ -192,6 +192,42 @@ S7Adapter::ReadConfig S7Adapter::createReadConfig()
         }
     }
     return configVector;
+}
+
+/**
+ * @brief Convert target to Snap7 specific area code
+ *
+ * @param target_
+ * @return int
+ * @details This function returns the Snap7 specific 8bit code for area type
+ */
+int S7Adapter::cvrtTargetToSnap7Area(const std::string &target_)
+{
+    if (target_ == "e")
+    {
+        return S7AreaPE;
+    }
+    if (target_ == "a")
+    {
+        return S7AreaPA;
+    }
+    if (target_ == "m")
+    {
+        return S7AreaMK;
+    }
+    if (target_ == "db")
+    {
+        return S7AreaDB;
+    }
+    if (target_ == "c")
+    {
+        return S7AreaCT;
+    }
+    if (target_ == "t")
+    {
+        return S7AreaTM;
+    }
+    return -1;
 }
 
 /**
@@ -256,7 +292,7 @@ TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_
 
     if (mode_ == ReadMode::SINGLE)
     {
-        item.target = parseTarget(tag_.value("target", "unknownTarget"));
+        item.target = cvrtTargetToSnap7Area(tag_.value("target", "unknownTarget"));
     }
     if (tag_.contains("dbno"))
     {
@@ -272,60 +308,6 @@ TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_
         item.bit = tag_.value("bit", 0);
     }
     return item;
-}
-
-Target S7Adapter::parseTarget(const std::string &target_)
-{
-    if (target_ == "db")
-    {
-        return Target::DB;
-    }
-    if (target_ == "e")
-    {
-        return Target::INPUT;
-    }
-    if (target_ == "a")
-    {
-        return Target::OUTPUT;
-    }
-    if (target_ == "m")
-    {
-        return Target::MERKER;
-    }
-    if (target_ == "t")
-    {
-        return Target::TIMER;
-    }
-    if (target_ == "c")
-    {
-        return Target::COUNTER;
-    }
-    if (target_ == "arr")
-    {
-        return Target::ARRAY;
-    }
-    return Target::INVALID;
-}
-
-AreaTarget S7Adapter::parseAreaTarget(const std::string &areaTarget_)
-{
-    if (areaTarget_ == "db")
-    {
-        return AreaTarget::DB;
-    }
-    if (areaTarget_ == "e")
-    {
-        return AreaTarget::INPUT;
-    }
-    if (areaTarget_ == "a")
-    {
-        return AreaTarget::OUTPUT;
-    }
-    if (areaTarget_ == "m")
-    {
-        return AreaTarget::MERKER;
-    }
-    return AreaTarget::INVALID;
 }
 
 S7Type S7Adapter::parseS7Type(const std::string &type_)
@@ -425,19 +407,34 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
     return S7Type::INVALID;
 }
 
-std::vector<DataPoint> S7Adapter::readData() const
+std::vector<DataPoint> S7Adapter::readData()
 {
     std::vector<DataPoint> dataVector;
-    for (const auto &[r, i] : snap7Config)
+    for (const ReadConfigItem &config : snap7Config)
     {
-        if (r.mode == ReadMode::AREA)
+        if (config.first.mode == ReadMode::AREA)
         {
-            return dataVector;
+            startSnap7AreaRead(config);
         }
-        if (r.mode == ReadMode::SINGLE)
+        if (config.first.mode == ReadMode::SINGLE)
         {
+            startSnap7SingleRead(config);
         }
     }
+    return dataVector;
+}
+
+void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
+{
+    const auto area = config_.first.target;
+    const auto start = config_.first.offset;
+    const auto amount = config_.first.amount;
+    const auto wordLen = S7WLByte;
+
+    client->ReadArea();
+}
+void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
+{
 }
 
 void S7Adapter::writeData() const

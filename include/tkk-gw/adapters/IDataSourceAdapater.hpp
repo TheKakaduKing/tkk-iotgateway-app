@@ -24,6 +24,7 @@ struct DataPoint
     i32 Quality;
     GenericType data;
     std::chrono::system_clock::time_point timestamp;
+    std::string name;
 };
 
 /**
@@ -36,7 +37,7 @@ public:
     virtual void connect() const = 0;
     virtual void disconnect() const = 0;
     virtual bool getConnectedState() const;
-    virtual std::vector<DataPoint> readData() const = 0;
+    virtual std::vector<DataPoint> readData() = 0;
     virtual void writeData() const = 0;
 
     virtual ~IDataSourceAdapter() {}

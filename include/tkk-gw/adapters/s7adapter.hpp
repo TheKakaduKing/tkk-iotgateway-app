@@ -5,27 +5,6 @@
 #include "snap7micro/s7_micro_client.h"
 #include "nlohmann/json.hpp"
 
-enum class Target
-{
-    DB,
-    INPUT,
-    OUTPUT,
-    MERKER,
-    TIMER,
-    COUNTER,
-    ARRAY,
-    INVALID,
-};
-
-enum class AreaTarget
-{
-    DB,
-    INPUT,
-    OUTPUT,
-    MERKER,
-    INVALID,
-};
-
 enum class S7Type
 {
     BOOL,
@@ -64,7 +43,7 @@ struct TagItem
 {
     u32 id{0};
     std::string name{""};
-    Target target{Target::DB}; // Set standard type to DB for area reads
+    u8 target{0};
     u32 dbNumber{0};
     u32 offset{0};
     S7Type type{0};
@@ -74,7 +53,7 @@ struct TagItem
 struct ReadHeader
 {
     ReadMode mode{ReadMode::SINGLE};
-    AreaTarget target{AreaTarget::DB};
+    u8 target{0};
     u32 dbNumber{0};
     u32 offset{0};
     u32 amount{0};
@@ -111,21 +90,22 @@ private:
     void connect() const override;
     void disconnect() const override;
     bool getConnectedState() const override;
-    std::vector<DataPoint> readData() const override;
+    std::vector<DataPoint> readData() override;
     void writeData() const override;
 
     std::ifstream openConfigFile();
     void parseConfigFile();
     void configureAdapter();
     TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
-    Target parseTarget(const std::string &target_);
-    AreaTarget parseAreaTarget(const std::string &areaTarget_);
     S7Type parseS7Type(const std::string &type_);
     int getTypeSize(S7Type type_);
     void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
     std::vector<ReadConfigItem> createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
     ReadConfig createReadConfig();
+    int cvrtTargetToSnap7Area(const std::string &target_);
+    void startSnap7AreaRead(const ReadConfigItem &config_);
+    void startSnap7SingleRead(const ReadConfigItem &config_);
 
     void DBG_printConfigElements();
 
