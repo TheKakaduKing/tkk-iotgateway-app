@@ -82,8 +82,9 @@ private:
     S7Connection connectionConfig{};
     std::unique_ptr<TSnap7MicroClient> client;
     bool status{false};
-    ReadConfig snap7Config;
+    const std::string configPath;
     nlohmann::json configDataJson;
+    ReadConfig snap7Config{};
 
     void connect() const override;
     void disconnect() const override;
@@ -91,7 +92,7 @@ private:
     std::vector<DataPoint> readData() const override;
     void writeData() const override;
 
-    void openConfigFile(const std::string &path_);
+    void openConfigFile();
     void parseConfigFile(std::ifstream &file_);
     ReadConfig configureAdapter();
     TagItem createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_0::json &tag_);
@@ -101,6 +102,6 @@ private:
     int getTypeSize(S7Type type_);
 
 public:
-    S7Adapter();
+    S7Adapter(const std::string &configPath_);
     ~S7Adapter();
 };

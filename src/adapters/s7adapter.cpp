@@ -1,11 +1,13 @@
+#include <iostream>
 #include <fstream>
 #include "tkk-gw/adapters/s7adapter.hpp"
 #include "snap7micro/s7_types.h"
 
-S7Adapter::S7Adapter() : client{std::make_unique<TSnap7MicroClient>()},
-                         status{false},
-                         snap7Config{configureAdapter()}
+S7Adapter::S7Adapter(const std::string &configPath_) : client{std::make_unique<TSnap7MicroClient>()},
+                                                       status{false},
+                                                       configPath{configPath_}
 {
+    snap7Config = configureAdapter();
 }
 
 S7Adapter::~S7Adapter()
@@ -18,13 +20,15 @@ S7Adapter::~S7Adapter()
  *
  * @param path_
  */
-void S7Adapter::openConfigFile(const std::string &path_)
+void S7Adapter::openConfigFile()
 {
-    std::ifstream file(path_); // std::ifstream is RAII -> closes itself when leaving scope
+    std::ifstream file(configPath); // std::ifstream is RAII -> closes itself when leaving scope
     if (!file.is_open())
     {
+        std::cout << "Error open config file" << std::endl;
         return;
     }
+    std::cout << "Config file opened" << std::endl;
     parseConfigFile(file);
 }
 
@@ -35,7 +39,9 @@ void S7Adapter::openConfigFile(const std::string &path_)
  */
 void S7Adapter::parseConfigFile(std::ifstream &file_)
 {
-    configDataJson = nlohmann::json::parse(file_, NULL, true); // Exceptions alloewd for now for testing
+
+    std::cout << "Parsing config file" << std::endl;
+    configDataJson = nlohmann::json::parse(file_, nullptr, true); // Exceptions alloewd for now for testing
 }
 
 /**
@@ -44,8 +50,13 @@ void S7Adapter::parseConfigFile(std::ifstream &file_)
  */
 S7Adapter::ReadConfig S7Adapter::configureAdapter()
 {
-    S7Adapter::ReadConfig configVector;
+    openConfigFile();
+    std::cout << "Parsing config file finished" << std::endl;
+
+    S7Adapter::ReadConfig configVector{};
     ReadType readType;
+
+    std::cout << "Start configuration" << std::endl;
 
     const auto &con = configDataJson.at("connection");
     if (!con.contains("ip") || !con["ip"].is_string())
@@ -55,6 +66,11 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
     connectionConfig.ip = con.at("ip").get<std::string>();
     connectionConfig.rack = con.value("rack", 0);
     connectionConfig.slot = con.value("slot", 2);
+
+    std::cout << "Connection config finished" << std::endl;
+    std::cout << "IP: " << connectionConfig.ip << std::endl;
+    std::cout << "Rack: " << connectionConfig.rack << std::endl;
+    std::cout << "Slot: " << connectionConfig.slot << std::endl;
 
     if (configDataJson.contains("area"))
     {
@@ -71,11 +87,24 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
 
     const auto &tags = configDataJson.at("tags");
 
-    configVector[0].first = readType;
+    std::cout << "Start reading tags..." << std::endl;
 
     size_t v{0}, maxItemCount{client->PDULength / 12}, currentItemCount{0};
     int currentPduSize{0}, currentItemSize{0};
     TagItem tempTagItem{};
+
+    maxItemCount = 19;
+    client->PDULength = 64;
+
+    std::pair tempPair{readType, std::vector<TagItem>{}};
+    configVector.push_back(tempPair);
+
+    std::cout << std::endl;
+    std::cout << "New index created..." << std::endl;
+    std::cout << "Area: " << configVector[v].first.readArea << std::endl;
+    std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
+    std::cout << "Offset: " << configVector[v].first.offset << std::endl;
+
     for (const auto &tag : tags)
     {
         tempTagItem = createTagItem(configVector[v].first.readArea, tag);
@@ -87,14 +116,39 @@ S7Adapter::ReadConfig S7Adapter::configureAdapter()
                 currentItemSize++; // Must be 2 byte aligned
             }
 
-            if (currentPduSize + currentItemSize > client->PDULength || currentItemCount >= maxItemCount)
+            currentPduSize += currentItemSize;
+
+            if (currentPduSize > client->PDULength || currentItemCount >= maxItemCount)
             {
+                configVector.push_back(tempPair);
                 v++; // Setup new ReadMultiVar request
                 configVector[v].first = readType;
-                currentPduSize = 0 + currentItemSize;
+                std::cout << std::endl;
+                std::cout << "New index created..." << std::endl;
+                std::cout << "Area: " << configVector[v].first.readArea << std::endl;
+                std::cout << "DB number: " << configVector[v].first.dbNumber << std::endl;
+                std::cout << "Offset: " << configVector[v].first.offset << std::endl;
+                currentPduSize = 12 + currentItemSize;
+                currentItemCount = 0;
             }
+            std::cout << std::endl;
+            std::cout << "Current pdu size: " << currentPduSize << std::endl;
+            std::cout << "Current item count: " << currentItemCount << std::endl;
+            std::cout << "Current item size: " << currentItemSize << std::endl;
+            std::cout << "Vector index: " << v << std::endl;
+            std::cout << "Max item count: " << maxItemCount << std::endl;
+            std::cout << "Snap7 max pdu size: " << client->PDULength << std::endl;
             currentItemCount++;
         }
+        std::cout << std::endl;
+        std::cout << "Created new Tag: " << tempTagItem.id << std::endl;
+        std::cout << "id: " << tempTagItem.id << std::endl;
+        std::cout << "name: " << tempTagItem.name << std::endl;
+        std::cout << "target: " << int(tempTagItem.target) << std::endl;
+        std::cout << "db: " << tempTagItem.dbNumber << std::endl;
+        std::cout << "offset: " << tempTagItem.offset << std::endl;
+        std::cout << "type: " << int(tempTagItem.type) << std::endl;
+        std::cout << "bit: " << int(tempTagItem.bit) << std::endl;
         configVector[v].second.push_back(tempTagItem);
     }
     return configVector;
@@ -158,7 +212,7 @@ TagItem S7Adapter::createTagItem(bool readArea_, const nlohmann::json_abi_v3_12_
 {
     TagItem item{};
     item.id = tag_.value("id", 0);
-    item.name = tag_.value("id", "unknown");
+    item.name = tag_.value("name", "unknown");
 
     if (!readArea_)
     {
