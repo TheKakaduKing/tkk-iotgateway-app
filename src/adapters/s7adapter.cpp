@@ -427,12 +427,125 @@ std::vector<DataPoint> S7Adapter::readData()
 void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
 {
     const auto area = config_.first.target;
+    const auto dbNumber = config_.first.dbNumber;
     const auto start = config_.first.offset;
     const auto amount = config_.first.amount;
     const auto wordLen = S7WLByte;
+    std::vector<u8> buffer(amount);
 
-    client->ReadArea();
+    client->ReadArea(area, dbNumber, start, amount, wordLen, buffer.data());
 }
+
+std::span<const u8> S7Adapter::extractBytes(std::span<const u8> buffer_, u32 offset_, u32 amount_)
+{
+    if (offset_ + amount_ > buffer_.size())
+    {
+        return buffer_;
+    }
+    return buffer_.subspan(offset_, amount_);
+}
+
+void S7Adapter::cvrtBytesToType(std::span<u8> bytes_, S7Type type_)
+{
+    switch (type_)
+    {
+        // Signle bit
+    case S7Type::BOOL:
+    {
+        break;
+    }
+        // Unsigned 1 byte
+    case S7Type::BYTE:
+    case S7Type::CHAR:
+    case S7Type::USINT:
+    {
+        break;
+    }
+        // Signed 1 byte
+    case S7Type::SINT:
+    {
+        break;
+    }
+        // Signed 2 byte
+    case S7Type::WORD:
+    case S7Type::INT:
+    {
+        break;
+    }
+        // Signed 4 byte
+    case S7Type::DWORD:
+    case S7Type::DINT:
+    {
+        break;
+    }
+        // Signed 8 byte
+    case S7Type::LWORD:
+    case S7Type::LINT:
+    {
+        break;
+    }
+        // Unsigned 2 byte
+    case S7Type::UINT:
+    case S7Type::WCHAR:
+    {
+        break;
+    }
+        // Unsigned 4 byte
+    case S7Type::UDINT:
+    {
+        break;
+    }
+        // Unsigned 8 byte
+    case S7Type::ULINT:
+    {
+        break;
+    }
+    // IEEE Standard 4 byte float
+    case S7Type::REAL:
+    {
+        break;
+    }
+    // IEEE Standard 8 byte double
+    case S7Type::LREAL:
+    {
+        break;
+    }
+        // String
+    case S7Type::STRING:
+    {
+        break;
+    }
+    // BCD
+    case S7Type::S5TIME:
+    {
+        break;
+    }
+    // IEC Time
+    case S7Type::TIME:
+    {
+        break;
+    }
+    // IEC LTime
+    case S7Type::LTIME:
+    {
+        break;
+    }
+    // Timer
+    case S7Type::TIMER:
+    {
+        break;
+    }
+    // Counter
+    case S7Type::COUNTER:
+    {
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+
 void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
 {
 }

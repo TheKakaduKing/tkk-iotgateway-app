@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <span>
 #include "tkk-gw/types.hpp"
 #include "IDataSourceAdapater.hpp"
 #include "snap7micro/s7_micro_client.h"
@@ -106,6 +107,9 @@ private:
     int cvrtTargetToSnap7Area(const std::string &target_);
     void startSnap7AreaRead(const ReadConfigItem &config_);
     void startSnap7SingleRead(const ReadConfigItem &config_);
+
+    std::span<const u8> extractBytes(std::span<const u8> buffer_, u32 offset_, u32 length);
+    void cvrtBytesToType(std::span<u8> bytes_, S7Type type_);
 
     void DBG_printConfigElements();
 
