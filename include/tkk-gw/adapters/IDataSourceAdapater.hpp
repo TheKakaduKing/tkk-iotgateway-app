@@ -25,6 +25,7 @@ struct DataPoint
     i32 id{0};
     i32 Quality{0};
     GenericType data{0};
+    std::string type{""};
     std::chrono::system_clock::time_point timestamp{};
     std::string name{""};
 };

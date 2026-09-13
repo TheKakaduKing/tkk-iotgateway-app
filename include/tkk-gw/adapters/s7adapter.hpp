@@ -110,7 +110,7 @@ private:
     std::vector<DataPoint> createDataPoints(const std::span<const u8> &buffer_);
 
     std::span<const u8> extractBytes(std::span<const u8> buffer_, u32 offset_, u32 length);
-    GenericType cvrtBytesToType(std::span<const u8> bytes_, S7Type type_);
+    GenericType cvrtBytesToType(std::span<const u8> bytes_, S7Type type_, u8 bit_);
 
     void DBG_printConfigElements();
 
