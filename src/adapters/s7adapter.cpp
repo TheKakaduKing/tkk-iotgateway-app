@@ -23,6 +23,11 @@ void S7Adapter::init()
         snap7Config = createReadConfig();
         DBG_printConfigElements();
     }
+    else
+    {
+        exit;
+    }
+    const auto &test = readData();
 }
 
 /**
@@ -410,7 +415,7 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
 std::vector<DataPoint> S7Adapter::readData()
 {
     std::vector<DataPoint> dataVector;
-    for (const ReadConfigItem &config : snap7Config)
+    for (const auto &config : snap7Config)
     {
         if (config.first.mode == ReadMode::AREA)
         {
@@ -433,7 +438,53 @@ void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
     const auto wordLen = S7WLByte;
     std::vector<u8> buffer(amount);
 
-    client->ReadArea(area, dbNumber, start, amount, wordLen, buffer.data());
+    int result = client->ReadArea(area, dbNumber, start, amount, wordLen, buffer.data());
+    std::cout << std::endl;
+    std::cout << "snap7 read result:    " << result << std::endl;
+    for (const auto &r : buffer)
+    {
+        std::cout << std::endl;
+        std::cout << i32(r) << std::endl;
+    }
+    std::span<const u8> view(buffer);
+    createDataPoints(view);
+}
+
+std::vector<DataPoint> S7Adapter::createDataPoints(const std::span<const u8> &buffer_)
+{
+    std::vector<DataPoint> dataVector{};
+
+    for (const auto &config : snap7Config)
+    {
+        for (const auto &item : config.second)
+        {
+            DataPoint tempDP{};
+            tempDP.id = item.id;
+            tempDP.Quality = 0; // FIX
+            tempDP.name = item.name;
+            tempDP.timestamp = std::chrono::system_clock::now();
+            tempDP.data = cvrtBytesToType(extractBytes(buffer_, item.offset, getTypeSize(item.type)), item.type);
+
+            dataVector.push_back(tempDP);
+        }
+    }
+    std::cout << std::endl;
+    std::cout << "Creation of DP finished" << std::endl;
+    std::cout << "DP size:  " << dataVector.size() << std::endl;
+    for (const auto &dp : dataVector)
+    {
+        std::cout << std::endl;
+        std::cout << "<-DataPoint->" << std::endl;
+        std::cout << "id:       " << dp.id << std::endl;
+        std::cout << "Quality:  " << dp.Quality << std::endl;
+        std::cout << "name:     " << dp.name << std::endl;
+        std::cout << "time:     " << dp.timestamp << std::endl;
+        std::cout << "data:     ";
+        std::visit([](const auto &value)
+                   { std::cout << value; }, dp.data);
+        std::cout << std::endl;
+    }
+    return dataVector;
 }
 
 std::span<const u8> S7Adapter::extractBytes(std::span<const u8> buffer_, u32 offset_, u32 amount_)
@@ -445,8 +496,15 @@ std::span<const u8> S7Adapter::extractBytes(std::span<const u8> buffer_, u32 off
     return buffer_.subspan(offset_, amount_);
 }
 
-void S7Adapter::cvrtBytesToType(std::span<u8> bytes_, S7Type type_)
+GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_)
 {
+    size_t size = getTypeSize(type_);
+
+    if (bytes_.size() != size)
+    {
+        return u32(99); // ERH
+    }
+
     switch (type_)
     {
         // Signle bit
@@ -459,55 +517,85 @@ void S7Adapter::cvrtBytesToType(std::span<u8> bytes_, S7Type type_)
     case S7Type::CHAR:
     case S7Type::USINT:
     {
+        u8 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Signed 1 byte
     case S7Type::SINT:
     {
+        i8 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Signed 2 byte
     case S7Type::WORD:
     case S7Type::INT:
     {
+        i16 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Signed 4 byte
     case S7Type::DWORD:
     case S7Type::DINT:
     {
+        i32 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Signed 8 byte
     case S7Type::LWORD:
     case S7Type::LINT:
     {
+        i64 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Unsigned 2 byte
     case S7Type::UINT:
     case S7Type::WCHAR:
     {
+        u16 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Unsigned 4 byte
     case S7Type::UDINT:
     {
+        u32 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // Unsigned 8 byte
     case S7Type::ULINT:
     {
+        u64 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
     // IEEE Standard 4 byte float
     case S7Type::REAL:
     {
+        f32 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
     // IEEE Standard 8 byte double
     case S7Type::LREAL:
     {
+        f64 value;
+        std::memcpy(&value, bytes_.data(), size);
+        return value;
         break;
     }
         // String
@@ -542,6 +630,7 @@ void S7Adapter::cvrtBytesToType(std::span<u8> bytes_, S7Type type_)
     }
 
     default:
+        return u32(99);
         break;
     }
 }

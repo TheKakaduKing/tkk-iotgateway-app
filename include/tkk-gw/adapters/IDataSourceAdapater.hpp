@@ -15,16 +15,18 @@ using GenericType = std::variant<
     u16,
     i32,
     u32,
+    i64,
+    u64,
     f32,
     f64>;
 
 struct DataPoint
 {
-    i32 id;
-    i32 Quality;
-    GenericType data;
-    std::chrono::system_clock::time_point timestamp;
-    std::string name;
+    i32 id{0};
+    i32 Quality{0};
+    GenericType data{0};
+    std::chrono::system_clock::time_point timestamp{};
+    std::string name{""};
 };
 
 /**
