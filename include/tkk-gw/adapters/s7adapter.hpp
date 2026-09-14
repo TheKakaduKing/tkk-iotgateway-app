@@ -87,6 +87,9 @@ private:
     const std::string configPath;
     nlohmann::json configDataJson;
     ReadConfig snap7Config{};
+    std::vector<u8> readBuffer{};
+    std::vector<DataPoint> previousDatapPoints{};
+    std::vector<DataPoint> currentDatapPoints{};
 
     void connect() const override;
     void disconnect() const override;
@@ -107,12 +110,13 @@ private:
     int cvrtTargetToSnap7Area(const std::string &target_);
     void startSnap7AreaRead(const ReadConfigItem &config_);
     void startSnap7SingleRead(const ReadConfigItem &config_);
-    std::vector<DataPoint> createDataPoints(const std::span<const u8> &buffer_);
+    void createDataPoints();
 
     std::span<const u8> extractBytes(std::span<const u8> buffer_, u32 offset_, u32 length);
     GenericType cvrtBytesToType(std::span<const u8> bytes_, S7Type type_, u8 bit_);
 
     void DBG_printConfigElements();
+    void DBG_printCurrentDPElements();
 
 public:
     void init();

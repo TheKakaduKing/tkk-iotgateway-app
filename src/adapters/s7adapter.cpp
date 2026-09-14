@@ -414,6 +414,11 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
     return S7Type::INVALID;
 }
 
+/**
+ * @brief Read data from given endpoint
+ *
+ * @return std::vector<DataPoint>
+ */
 std::vector<DataPoint> S7Adapter::readData()
 {
     std::vector<DataPoint> dataVector;
@@ -431,6 +436,11 @@ std::vector<DataPoint> S7Adapter::readData()
     return dataVector;
 }
 
+/**
+ * @brief Start a snap7 Area read
+ *
+ * @param config_ Config item
+ */
 void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
 {
     const auto area = config_.first.target;
@@ -438,17 +448,30 @@ void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
     const auto start = config_.first.offset;
     const auto amount = config_.first.amount;
     const auto wordLen = S7WLByte;
-    std::vector<u8> buffer(amount);
-    std::span<const u8> view(buffer);
 
-    int result = client->ReadArea(area, dbNumber, start, amount, wordLen, buffer.data());
+    int result = client->ReadArea(area, dbNumber, start, amount, wordLen, readBuffer.data());
 
-    createDataPoints(view);
+    createDataPoints();
 }
 
-std::vector<DataPoint> S7Adapter::createDataPoints(const std::span<const u8> &buffer_)
+/**
+ * @brief Start a snap7 MulitVar read
+ *
+ * @param config_ Config item
+ */
+void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
 {
-    std::vector<DataPoint> dataVector{};
+}
+
+/**
+ * @brief Create generic datapoints
+ *
+ * @param buffer_
+ * @return std::vector<DataPoint>
+ */
+void S7Adapter::createDataPoints()
+{
+    currentDatapPoints.clear();
 
     for (const auto &config : snap7Config)
     {
@@ -459,31 +482,21 @@ std::vector<DataPoint> S7Adapter::createDataPoints(const std::span<const u8> &bu
             tempDP.Quality = 0; // FIX
             tempDP.name = item.name;
             tempDP.timestamp = std::chrono::system_clock::now();
-            tempDP.data = cvrtBytesToType(extractBytes(buffer_, item.offset, getTypeSize(item.type)), item.type, item.bit);
+            tempDP.data = cvrtBytesToType(extractBytes(readBuffer, item.offset, getTypeSize(item.type)), item.type, item.bit);
 
-            dataVector.push_back(tempDP);
-            std::cout << "New DP created" << std::endl;
+            currentDatapPoints.push_back(tempDP);
         }
     }
-    std::cout << std::endl;
-    std::cout << "Creation of DP finished" << std::endl;
-    std::cout << "DP size:  " << dataVector.size() << std::endl;
-    for (const auto &dp : dataVector)
-    {
-        std::cout << std::endl;
-        std::cout << "<-DataPoint->" << std::endl;
-        std::cout << "id:       " << dp.id << std::endl;
-        std::cout << "Quality:  " << dp.Quality << std::endl;
-        std::cout << "name:     " << dp.name << std::endl;
-        std::cout << "time:     " << dp.timestamp << std::endl;
-        std::cout << "data:     ";
-        std::visit([](const auto &value)
-                   { std::cout << value; }, dp.data);
-        std::cout << std::endl;
-    }
-    return dataVector;
 }
 
+/**
+ * @brief Extract bytes from a byte buffer
+ *
+ * @param buffer_ std::span on const u8
+ * @param offset_
+ * @param amount_
+ * @return std::span<const u8>
+ */
 std::span<const u8> S7Adapter::extractBytes(std::span<const u8> buffer_, u32 offset_, u32 amount_)
 {
     if (offset_ + amount_ > buffer_.size())
@@ -493,6 +506,14 @@ std::span<const u8> S7Adapter::extractBytes(std::span<const u8> buffer_, u32 off
     return buffer_.subspan(offset_, amount_);
 }
 
+/**
+ * @brief Convert bytes to S7 type
+ *
+ * @param bytes_
+ * @param type_
+ * @param bit_
+ * @return GenericType
+ */
 GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_, u8 bit_)
 {
     size_t size = getTypeSize(type_);
@@ -659,10 +680,6 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_,
     }
 }
 
-void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
-{
-}
-
 void S7Adapter::writeData() const
 {
     return;
@@ -696,6 +713,7 @@ bool S7Adapter::getConnectedState() const
 }
 
 void S7Adapter::DBG_printConfigElements()
+
 {
     using namespace std;
     cout << "Amount of Read configs:     " << snap7Config.size() << endl;
@@ -729,5 +747,24 @@ void S7Adapter::DBG_printConfigElements()
             cout << "type:     " << int(t.type) << endl;
             cout << "bit:      " << int(t.bit) << endl;
         }
+    }
+}
+
+void S7Adapter::DBG_printCurrentDPElements()
+{
+    using namespace std;
+
+    for (const auto &dp : currentDatapPoints)
+    {
+        cout << endl;
+        cout << "<-DataPoint->" << endl;
+        cout << "id:       " << dp.id << endl;
+        cout << "Quality:  " << dp.Quality << endl;
+        cout << "name:     " << dp.name << endl;
+        cout << "time:     " << dp.timestamp << endl;
+        cout << "data:     ";
+        visit([](const auto &value)
+              { cout << value; }, dp.data);
+        cout << endl;
     }
 }
