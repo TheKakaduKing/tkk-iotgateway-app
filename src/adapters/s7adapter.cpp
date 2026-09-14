@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <arpa/inet.h>
 #include "tkk-gw/adapters/s7adapter.hpp"
 #include "snap7micro/s7_types.h"
 
@@ -46,7 +47,7 @@ void S7Adapter::init()
     // DBG_printConfigElements();
     createDataPoints();
     std::cout << "Created DPs, size:  " << currentDatapPoints.size() << std::endl;
-    DBG_printCurrentDPElements();
+    // DBG_printCurrentDPElements();
 }
 
 /**
@@ -54,26 +55,373 @@ void S7Adapter::init()
  *
  * @param path_
  */
-std::ifstream S7Adapter::openConfigFile()
+std::expected<void, ConfigError> S7Adapter::openAndParseConfigFile()
 {
     std::ifstream file(configPath); // std::ifstream is RAII -> closes itself when leaving scope
     if (!file.is_open())
     {
-        std::cout << "Error opening config file" << std::endl;
-        exit;
+        return std::unexpected(ConfigError::FileNotFound);
     }
-    return file;
+    configDataJson = nlohmann::json::parse(file, nullptr, false);
+    if (configDataJson.is_discarded())
+    {
+        return std::unexpected(ConfigError::ParseError);
+    }
+    return {};
+}
+
+std::expected<void, ConfigError> S7Adapter::validateJsonScheme()
+{
+    if (!configDataJson.contains("connection"))
+    {
+        return std::unexpected(ConfigError::MissingNode);
+    }
+    auto result = validateJsonConnection(configDataJson.at("connection"));
+    if (!result)
+    {
+        return result;
+    }
+
+    if (configDataJson.contains("read"))
+    {
+        if (!configDataJson.at("read").is_array())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+        result = validateJsonReadBlock(configDataJson.at("read"));
+        if (!result)
+        {
+            return result;
+        }
+    }
+    return {};
 }
 
 /**
- * @brief Parses config file into nlohmann::json object
+ * @brief Validate the Json file connection node
  *
- * @param file_
+ * @param config_
+ * @return std::expected<void, ConfigError>
  */
-void S7Adapter::parseConfigFile()
+std::expected<void, ConfigError> S7Adapter::validateJsonConnection(const nlohmann::json_abi_v3_12_0::json &config_)
 {
-    std::ifstream file{openConfigFile()};
-    configDataJson = nlohmann::json::parse(file, nullptr, true); // Exceptions alloewd for now for testing
+    if (!config_.contains("ip"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("ip").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    std::string ip = config_.at("ip");
+    struct in_addr addr;
+    auto res = inet_pton(AF_INET, ip.c_str(), &addr);
+    if (res != 1)
+    {
+        return std::unexpected(ConfigError::IpMismatch);
+    }
+    if (!config_.contains("rack"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("rack").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!config_.contains("slot"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("slot").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    return {};
+}
+
+std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const nlohmann::json_abi_v3_12_0::json &config_)
+{
+    for (const auto &block : config_)
+    {
+        if (!block.contains("mode"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!block.at("mode").is_string())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+        std::string mode = block.at("mode");
+        if (mode != "single" && mode != "area")
+        {
+            return std::unexpected(ConfigError::OutOfBound);
+        }
+        if (mode == "area")
+        {
+            auto result = validateJsonAreaBlock(block);
+            if (!result)
+            {
+                return result;
+            }
+        }
+        if (mode == "single")
+        {
+            auto result = validateJsonSingleBlock(block);
+            if (!result)
+            {
+                return result;
+            }
+        }
+    }
+    return {};
+}
+
+std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const nlohmann::json_abi_v3_12_0::json &config_)
+{
+    if (!config_.contains("target"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("target").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (cvrtTargetToSnap7Area(config_.at("target")) == -1)
+    {
+        return std::unexpected(ConfigError::OutOfBound);
+    }
+    if (!config_.contains("number"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("number").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!config_.contains("offset"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("offset").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!config_.contains("amount"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!config_.at("amount").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!config_.contains("tags"))
+    {
+        return std::unexpected(ConfigError::MissingNode);
+    }
+    if (!config_.at("tags").is_array())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    const auto &tags = config_.at("tags");
+    for (const auto &tag : tags)
+    {
+        auto result = validateJsonTagItemArea(tag);
+        if (!result)
+        {
+            return result;
+        }
+    }
+    return {};
+}
+
+std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const nlohmann::json_abi_v3_12_0::json &config_)
+{
+    if (!config_.contains("tags"))
+    {
+        return std::unexpected(ConfigError::MissingNode);
+    }
+    if (!config_.at("tags").is_array())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    const auto &tags = config_.at("tags");
+    for (const auto &tag : tags)
+    {
+        auto result = validateJsonTagItemSingle(tag);
+        if (!result)
+        {
+            return result;
+        }
+    }
+    return {};
+}
+
+std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const nlohmann::json_abi_v3_12_0::json &tag_)
+{
+    if (!tag_.contains("id"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("id").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    u32 id = tag_.at("id");
+    auto [it, inserted] = seenIDs.insert(id);
+    if (inserted == false)
+    {
+        return std::unexpected(ConfigError::DuplicateID);
+    }
+    if (!tag_.contains("name"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("name").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!tag_.contains("offset"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("offset").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!tag_.contains("type"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("type").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    std::string type = tag_.at("type");
+    auto s7type = stringToS7Type(type);
+    if (s7type == S7Type::INVALID)
+    {
+        return std::unexpected(ConfigError::OutOfBound);
+    }
+    if (s7type == S7Type::BOOL)
+    {
+        if (!tag_.contains("bit"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!tag_.at("bit").is_number_unsigned())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+        u8 bit = tag_.at("bit");
+        if (bit < 0 || bit > 7)
+        {
+            return std::unexpected(ConfigError::OutOfBound);
+        }
+    }
+    return {};
+}
+
+std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const nlohmann::json_abi_v3_12_0::json &tag_)
+{
+    if (!tag_.contains("id"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("id").is_number_unsigned())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    u32 id = tag_.at("id");
+    auto [it, inserted] = seenIDs.insert(id);
+    if (inserted == false)
+    {
+        return std::unexpected(ConfigError::DuplicateID);
+    }
+    if (!tag_.contains("name"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("name").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    if (!tag_.contains("target"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("target").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    auto target = cvrtTargetToSnap7Area(tag_.at("target"));
+    if (target == -1)
+    {
+        return std::unexpected(ConfigError::OutOfBound);
+    }
+    if (target == S7AreaDB || target == S7AreaTM || target == S7AreaCT)
+    {
+        if (!tag_.contains("number"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!tag_.at("number").is_number_unsigned())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+        if (target == S7AreaDB)
+        {
+            if (!tag_.contains("offset"))
+            {
+                return std::unexpected(ConfigError::MissingKey);
+            }
+            if (!tag_.at("offset").is_number_unsigned())
+            {
+                return std::unexpected(ConfigError::TypeMismatch);
+            }
+        }
+    }
+    else
+    {
+        if (!tag_.contains("offset"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!tag_.at("offset").is_number_unsigned())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+    }
+    if (!tag_.contains("type"))
+    {
+        return std::unexpected(ConfigError::MissingKey);
+    }
+    if (!tag_.at("type").is_string())
+    {
+        return std::unexpected(ConfigError::TypeMismatch);
+    }
+    std::string type = tag_.at("type");
+    auto s7type = stringToS7Type(type);
+    if (s7type == S7Type::INVALID)
+    {
+        return std::unexpected(ConfigError::OutOfBound);
+    }
+    if (s7type == S7Type::BOOL)
+    {
+        if (!tag_.contains("bit"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!tag_.at("bit").is_number_unsigned())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+        u8 bit = tag_.at("bit");
+        if (bit < 0 || bit > 7)
+        {
+            return std::unexpected(ConfigError::OutOfBound);
+        }
+    }
+    return {};
 }
 
 /**
@@ -180,7 +528,18 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
  */
 void S7Adapter::configureAdapter()
 {
-    parseConfigFile();
+    auto resParse = openAndParseConfigFile();
+    if (!resParse)
+    {
+        std::cout << "Error occured while parsing:      " << ConfigErrorToString(resParse.error()) << std::endl;
+        exit(1);
+    }
+    auto resValidate = validateJsonScheme();
+    if (!resValidate)
+    {
+        std::cout << "Error occured while validating:   " << ConfigErrorToString(resValidate.error()) << std::endl;
+        exit(1);
+    }
     setupConnConfig();
 }
 

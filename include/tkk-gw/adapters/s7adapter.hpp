@@ -1,7 +1,10 @@
 #pragma once
 #include <memory>
 #include <span>
+#include <expected>
+#include <unordered_set>
 #include "tkk-gw/types.hpp"
+#include "tkk-gw/adapters/s7adapter_errors.hpp"
 #include "IDataSourceAdapater.hpp"
 #include "snap7micro/s7_micro_client.h"
 #include "nlohmann/json.hpp"
@@ -93,6 +96,7 @@ private:
     std::vector<u8> commonReadBuffer{};
     std::vector<DataPoint> previousDatapPoints{};
     std::vector<DataPoint> currentDatapPoints{};
+    std::unordered_set<int> seenIDs;
 
     void connect() const override;
     void disconnect() const override;
@@ -100,9 +104,15 @@ private:
     std::vector<DataPoint> readData() override;
     void writeData() const override;
 
-    std::ifstream openConfigFile();
-    void parseConfigFile();
+    std::expected<void, ConfigError> openAndParseConfigFile();
     void configureAdapter();
+    std::expected<void, ConfigError> validateJsonScheme();
+    std::expected<void, ConfigError> validateJsonConnection(const nlohmann::json_abi_v3_12_0::json &config_);
+    std::expected<void, ConfigError> validateJsonReadBlock(const nlohmann::json_abi_v3_12_0::json &config_);
+    std::expected<void, ConfigError> validateJsonAreaBlock(const nlohmann::json_abi_v3_12_0::json &config_);
+    std::expected<void, ConfigError> validateJsonSingleBlock(const nlohmann::json_abi_v3_12_0::json &config_);
+    std::expected<void, ConfigError> validateJsonTagItemArea(const nlohmann::json_abi_v3_12_0::json &tag_);
+    std::expected<void, ConfigError> validateJsonTagItemSingle(const nlohmann::json_abi_v3_12_0::json &tag_);
     TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
     S7Type stringToS7Type(const std::string &type_);
     std::string S7TypeToString(const S7Type type_);
