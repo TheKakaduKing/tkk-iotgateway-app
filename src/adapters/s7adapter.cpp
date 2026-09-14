@@ -326,6 +326,13 @@ int S7Adapter::getTypeDataSize(S7Type type_)
     }
 }
 
+/**
+ * @brief Create a tag item for the read config
+ *
+ * @param mode_
+ * @param tag_
+ * @return TagItem
+ */
 TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_)
 {
     TagItem item{};
@@ -947,6 +954,12 @@ bool S7Adapter::getConnectedState() const
     return client->Connected;
 }
 
+/**
+ * @brief Convert s5time format to miliseconds
+ *
+ * @param time_
+ * @return u32
+ */
 u32 S7Adapter::S5TimeToMilis(const u16 time_)
 {
     // Bit 12/13 give the time base
@@ -1000,7 +1013,6 @@ u32 S7Adapter::S5TimeToMilis(const u16 time_)
     }
     return bcdMiliseconds;
 }
-
 void S7Adapter::DBG_printConfigElements()
 
 {
