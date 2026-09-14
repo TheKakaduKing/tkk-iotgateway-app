@@ -22,25 +22,28 @@ void S7Adapter::init()
     if (client->PDULength > 0)
     {
         snap7Config = createReadConfig();
-        totalDataSize = 0;
         for (const auto &item : snap7Config)
         {
             for (const auto &subItem : item.second)
             {
+                totalReadSize += getTypeSize(subItem.type);
                 totalDataSize += getTypeDataSize(subItem.type);
             }
+            totalDpItems += item.second.size();
         }
-        currentDatapPoints.reserve(totalDataSize);
-        previousDatapPoints.reserve(totalDataSize);
-        std::cout << "Created data vectors, size (bytes):  " << totalDataSize << std::endl;
+        commonReadBuffer.reserve(totalReadSize);
+        currentDatapPoints.reserve(totalDpItems);
+        previousDatapPoints.reserve(totalDpItems);
+        std::cout << "Total data size calculated (bytes):  " << totalDataSize << std::endl;
+        std::cout << "Total read size calculated (bytes):  " << totalReadSize << std::endl;
         // DBG_printConfigElements();
     }
     else
     {
         exit;
     }
-    const auto &test = readData();
-    DBG_printConfigElements();
+    auto test = readData();
+    // DBG_printConfigElements();
     createDataPoints();
     std::cout << "Created DPs, size:  " << currentDatapPoints.size() << std::endl;
     DBG_printCurrentDPElements();
@@ -70,7 +73,6 @@ std::ifstream S7Adapter::openConfigFile()
 void S7Adapter::parseConfigFile()
 {
     std::ifstream file{openConfigFile()};
-    std::cout << "Parsing config file" << std::endl;
     configDataJson = nlohmann::json::parse(file, nullptr, true); // Exceptions alloewd for now for testing
 }
 
@@ -88,11 +90,6 @@ void S7Adapter::setupConnConfig()
     connectionConfig.ip = con.at("ip").get<std::string>();
     connectionConfig.rack = con.value("rack", 0);
     connectionConfig.slot = con.value("slot", 2);
-
-    std::cout << "Connection config finished" << std::endl;
-    std::cout << "IP: " << connectionConfig.ip << std::endl;
-    std::cout << "Rack: " << connectionConfig.rack << std::endl;
-    std::cout << "Slot: " << connectionConfig.slot << std::endl;
 }
 
 /**
@@ -187,6 +184,11 @@ void S7Adapter::configureAdapter()
     setupConnConfig();
 }
 
+/**
+ * @brief Create config for reading data
+ *
+ * @return S7Adapter::ReadConfig
+ */
 S7Adapter::ReadConfig S7Adapter::createReadConfig()
 {
     S7Adapter::ReadConfig configVector{};
@@ -305,6 +307,13 @@ int S7Adapter::getTypeSize(S7Type type_)
     }
 }
 
+/**
+ * @brief Return needed data size in byte
+ *
+ * @param type_
+ * @return int
+ * @details E.g. a timer value is read via 2 bytes, but milisec. value needs to be 4 bytes
+ */
 int S7Adapter::getTypeDataSize(S7Type type_)
 {
     if (type_ == S7Type::TIMER || type_ == S7Type::S5TIME)
@@ -595,6 +604,7 @@ std::vector<DataPoint> S7Adapter::readData()
             startSnap7SingleRead(config);
         }
     }
+    std::cout << "Reads finished, size:     " << commonReadBuffer.size() << std::endl;
     return currentDatapPoints;
 }
 
@@ -614,6 +624,8 @@ void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
 
     int result = client->ReadArea(area, number, start, amount, wordLen, buffer.data());
 
+    std::cout << "Area read result:     " << result << std::endl;
+
     commonReadBuffer.insert(commonReadBuffer.end(), buffer.begin(), buffer.end());
 }
 
@@ -630,7 +642,7 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
     size_t bufferSize{0};
     for (const auto &item : config_.second)
     {
-        bufferSize += getTypeDataSize(item.type);
+        bufferSize += getTypeSize(item.type);
     }
 
     std::vector<u8> buffer(bufferSize);
@@ -660,6 +672,7 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
         offset += getTypeSize(item.type);
     }
     int result = client->ReadMultiVars(snap7DataItems.data(), snap7DataItems.size());
+    std::cout << "Single read result:     " << result << std::endl;
 
     commonReadBuffer.insert(commonReadBuffer.end(), buffer.begin(), buffer.end());
 }
@@ -675,10 +688,9 @@ void S7Adapter::createDataPoints()
     // Swap DP buffers
     std::swap(currentDatapPoints, previousDatapPoints);
     currentDatapPoints.clear();
-    std::cout << "current DP size:   " << currentDatapPoints.size() << std::endl;
-    std::cout << "previous DP size:  " << previousDatapPoints.size() << std::endl;
 
     size_t offset{0};
+    std::span<const u8> bufferView(commonReadBuffer);
 
     // Start filling DataPoints
     // This creates Datapoints out the commonReadBuffer
@@ -692,11 +704,9 @@ void S7Adapter::createDataPoints()
             tempDP.name = item.name;
             tempDP.timestamp = std::chrono::system_clock::now();
             tempDP.type = S7TypeToString(item.type);
-            tempDP.data = cvrtBytesToType(extractBytes(commonReadBuffer, offset, getTypeSize(item.type)), item.type, item.bit);
+            tempDP.data = cvrtBytesToType(extractBytes(bufferView, offset, getTypeSize(item.type)), item.type, item.bit);
 
             currentDatapPoints.push_back(tempDP);
-            std::cout << "Item created: " << tempDP.id << std::endl;
-
             offset += getTypeSize(item.type);
         }
     }
@@ -900,7 +910,7 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_,
     }
 
     default:
-        return u32(99);
+        return u32(98);
         break;
     }
 }
@@ -913,12 +923,12 @@ void S7Adapter::writeData() const
 void S7Adapter::connect() const
 {
     std::cout << std::endl;
-    std::cout << "Connecting to PLC..." << std::endl;
+    std::cout << "Connecting to PLC at IP " << connectionConfig.ip << " ..." << std::endl;
     int result;
     result = client->ConnectTo(connectionConfig.ip.c_str(), connectionConfig.rack, connectionConfig.slot);
     if (client->Connected)
     {
-        std::cout << "Connected to PLC on IP: " << connectionConfig.ip << std::endl;
+        std::cout << "Connected to PLC at IP: " << connectionConfig.ip << std::endl;
         std::cout << "Negotiated PDU size   : " << client->PDULength << std::endl;
         return;
     }
@@ -952,7 +962,7 @@ u32 S7Adapter::S5TimeToMilis(const u16 time_)
     bcd1 &= 0x0F; // Lower 4 bit
     // bit 4-7
     u8 bcd2 = (time_ >> 4);
-    bcd1 &= 0x0F; // Lower 4 bit
+    bcd2 &= 0x0F; // Lower 4 bit
     // bit 8-11
     u8 bcd3 = (time_ >> 8);
     bcd3 &= 0x0F; // Lower 4 bit
