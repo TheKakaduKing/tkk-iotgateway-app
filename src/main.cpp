@@ -6,6 +6,6 @@
  */
 int main(void)
 {
-    S7Adapter a1{"../test/config/S7testConfig_area.json"};
+    S7Adapter a1{"../test/config/S7testConfig.json"};
     a1.init();
 }

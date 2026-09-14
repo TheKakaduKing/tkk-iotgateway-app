@@ -18,19 +18,30 @@ void S7Adapter::init()
 {
     configureAdapter();
     connect();
+
     if (client->PDULength > 0)
     {
         snap7Config = createReadConfig();
         totalDataSize = 0;
         for (const auto &item : snap7Config)
         {
-            for (const auto &subItem : item.second)
+            if (item.first.mode == ReadMode::AREA)
             {
-                totalDataSize += getTypeSize(subItem.type);
+                totalDataSize += item.first.amount;
+                continue;
+            }
+            if (item.first.mode == ReadMode::SINGLE)
+            {
+                for (const auto &subItem : item.second)
+                {
+                    totalDataSize += getTypeSize(subItem.type);
+                }
+                continue;
             }
         }
         currentDatapPoints.reserve(totalDataSize);
         previousDatapPoints.reserve(totalDataSize);
+        std::cout << "Created data vectors, size (bytes):  " << totalDataSize << std::endl;
         // DBG_printConfigElements();
     }
     else
@@ -38,6 +49,10 @@ void S7Adapter::init()
         exit;
     }
     const auto &test = readData();
+    DBG_printConfigElements();
+    createDataPoints();
+    std::cout << "Created DPs, size:  " << currentDatapPoints.size() << std::endl;
+    DBG_printCurrentDPElements();
 }
 
 /**
@@ -102,7 +117,7 @@ S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::js
 
     tempReadHeader.mode = ReadMode::AREA;
     tempReadHeader.target = cvrtTargetToSnap7Area(block_.at("target").get<std::string>());
-    tempReadHeader.dbNumber = block_.at("dbno").get<u32>();
+    tempReadHeader.number = block_.at("number").get<u32>();
     tempReadHeader.offset = block_.at("offset").get<u32>();
     tempReadHeader.amount = block_.at("amount").get<u32>();
 
@@ -115,7 +130,6 @@ S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::js
         tempConfigItem.second.push_back(createTagItem(tempConfigItem.first.mode, tag));
     }
 
-    std::cout << "AreaRead config created" << std::endl;
     return tempConfigItem;
 }
 
@@ -193,6 +207,7 @@ S7Adapter::ReadConfig S7Adapter::createReadConfig()
         if (b.at("mode").get<std::string>() == "area")
         {
             configVector.push_back(createAreaReadConfigItem(b));
+            std::cout << "AreaRead config created" << std::endl;
             continue;
         }
         if (b.at("mode").get<std::string>() == "single")
@@ -201,6 +216,7 @@ S7Adapter::ReadConfig S7Adapter::createReadConfig()
             for (const auto &config : readConfigItemMemory)
             {
                 configVector.push_back(config);
+                std::cout << "SingleRead config created" << std::endl;
             }
             continue;
         }
@@ -268,6 +284,8 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::UINT:
     case S7Type::WCHAR:
     case S7Type::S5TIME:
+    case S7Type::TIMER:
+    case S7Type::COUNTER:
     {
         return sizeof(u16);
         break;
@@ -277,8 +295,6 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::UDINT:
     case S7Type::REAL:
     case S7Type::TIME:
-    case S7Type::TIMER:
-    case S7Type::COUNTER:
     {
         return sizeof(u32);
         break;
@@ -293,7 +309,7 @@ int S7Adapter::getTypeSize(S7Type type_)
         break;
     }
     default:
-        return 99;
+        return 64;
         break;
     }
 }
@@ -301,28 +317,25 @@ int S7Adapter::getTypeSize(S7Type type_)
 TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_)
 {
     TagItem item{};
-    item.id = tag_.value("id", 0);
-    item.name = tag_.value("name", "unknown");
+    item.id = tag_.value("id", -1);
+    item.name = tag_.value("name", "N/A");
 
     if (mode_ == ReadMode::SINGLE)
     {
-        item.target = cvrtTargetToSnap7Area(tag_.value("target", "unknownTarget"));
+        item.target = cvrtTargetToSnap7Area(tag_.value("target", "N/A"));
     }
-    if (tag_.contains("dbno"))
+    if (tag_.contains("number"))
     {
-        item.dbNumber = tag_.value("dbno", 0);
+        item.number = tag_.value("number", -1);
     }
     if (tag_.contains("offset"))
     {
-        item.offset = tag_.value("offset", 0);
+        item.offset = tag_.value("offset", -1);
     }
-    item.type = stringToS7Type(tag_.value("type", "unkownType"));
+    item.type = stringToS7Type(tag_.value("type", "N/A"));
     if (tag_.contains("bit") && item.type == S7Type::BOOL)
     {
-        item.bit = tag_.value("bit", 0);
-        std::cout << std::endl;
-        std::cout << "Created tag item with a bit" << std::endl;
-        std::cout << "Extrcted bit:" << int(item.bit) << std::endl;
+        item.bit = tag_.value("bit", -1);
     }
     return item;
 }
@@ -590,13 +603,13 @@ std::vector<DataPoint> S7Adapter::readData()
 void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
 {
     const auto area = config_.first.target;
-    const auto dbNumber = config_.first.dbNumber;
+    const auto number = config_.first.number;
     const auto start = config_.first.offset;
     const auto amount = config_.first.amount;
     const auto wordLen = S7WLByte;
     std::vector<u8> buffer(amount);
 
-    int result = client->ReadArea(area, dbNumber, start, amount, wordLen, buffer.data());
+    int result = client->ReadArea(area, number, start, amount, wordLen, buffer.data());
 
     commonReadBuffer.insert(commonReadBuffer.end(), buffer.begin(), buffer.end());
 }
@@ -614,7 +627,14 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
     size_t bufferSize{0};
     for (const auto &item : config_.second)
     {
-        bufferSize += getTypeSize(item.type);
+        if (item.type == S7Type::TIMER || item.type == S7Type::S5TIME)
+        {
+            bufferSize += sizeof(u32);
+        }
+        else
+        {
+            bufferSize += getTypeSize(item.type);
+        }
     }
 
     std::vector<u8> buffer(bufferSize);
@@ -626,13 +646,22 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
         TS7DataItem tempTS7item{};
         tempTS7item.Area = item.target;
         tempTS7item.WordLen = S7WLByte;
-        tempTS7item.DBNumber = item.dbNumber;
-        tempTS7item.Start = item.offset;
-        tempTS7item.Amount = getTypeSize(item.type);
+        tempTS7item.DBNumber = item.number;
+        // Amount for timers/counter set to 1 and not byte size (2)
+        if (tempTS7item.Area == S7AreaTM || tempTS7item.Area == S7AreaCT)
+        {
+            tempTS7item.Start = item.number;
+            tempTS7item.Amount = 1;
+        }
+        else
+        {
+            tempTS7item.Start = item.offset;
+            tempTS7item.Amount = getTypeSize(item.type);
+        }
         tempTS7item.pdata = buffer.data() + offset;
         snap7DataItems.push_back(tempTS7item);
 
-        offset += tempTS7item.Amount;
+        offset += getTypeSize(item.type);
     }
     int result = client->ReadMultiVars(snap7DataItems.data(), snap7DataItems.size());
 
@@ -650,6 +679,8 @@ void S7Adapter::createDataPoints()
     // Swap DP buffers
     std::swap(currentDatapPoints, previousDatapPoints);
     currentDatapPoints.clear();
+    std::cout << "current DP size:   " << currentDatapPoints.size() << std::endl;
+    std::cout << "previous DP size:  " << previousDatapPoints.size() << std::endl;
 
     size_t offset{0};
 
@@ -668,11 +699,11 @@ void S7Adapter::createDataPoints()
             tempDP.data = cvrtBytesToType(extractBytes(commonReadBuffer, offset, getTypeSize(item.type)), item.type, item.bit);
 
             currentDatapPoints.push_back(tempDP);
+            std::cout << "Item created: " << tempDP.id << std::endl;
 
             offset += getTypeSize(item.type);
         }
     }
-    DBG_printCurrentDPElements();
 }
 
 /**
@@ -852,11 +883,23 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_,
     // Timer
     case S7Type::TIMER:
     {
+        u16 raw{};
+        u16 value{};
+        std::memcpy(&raw, bytes_.data(), sizeof(u16));
+        raw = std::byteswap(raw);
+        std::memcpy(&value, &raw, sizeof(u16));
+        return S5TimeToMilis(value);
         break;
     }
     // Counter
     case S7Type::COUNTER:
     {
+        u16 raw{};
+        u16 value{};
+        std::memcpy(&raw, bytes_.data(), sizeof(u16));
+        raw = std::byteswap(raw);
+        std::memcpy(&value, &raw, sizeof(u16));
+        return value;
         break;
     }
 
@@ -898,6 +941,60 @@ bool S7Adapter::getConnectedState() const
     return client->Connected;
 }
 
+u32 S7Adapter::S5TimeToMilis(const u16 time_)
+{
+    // Bit 12/13 give the time base
+    u8 base = (time_ >> 12);
+    base &= 0x03;
+    // Goddamn this s5time format
+    // bit 0-3: dezimal but only valid for 0-9 * 1
+    // bit 4-7: dezimal but only valid for 0-9 * 10
+    // bit 8-11: dezimal but only valid for 0-9 * 100
+
+    // bit 0-3
+    u8 bcd1 = (time_);
+    bcd1 &= 0x0F; // Lower 4 bit
+    // bit 4-7
+    u8 bcd2 = (time_ >> 4);
+    bcd1 &= 0x0F; // Lower 4 bit
+    // bit 8-11
+    u8 bcd3 = (time_ >> 8);
+    bcd3 &= 0x0F; // Lower 4 bit
+    u16 bcdValue = bcd3 * 100 + bcd2 * 10 + bcd1 * 1;
+
+    u32 bcdMiliseconds{};
+    switch (base)
+    {
+    case 0:
+    {
+        bcdMiliseconds = bcdValue * 10;
+        break;
+    }
+    case 1:
+    {
+        bcdMiliseconds = bcdValue * 100;
+        break;
+    }
+    case 2:
+    {
+        bcdMiliseconds = bcdValue * 1000;
+        break;
+    }
+    case 3:
+    {
+        bcdMiliseconds = bcdValue * 10000;
+        break;
+    }
+
+    default:
+    {
+        bcdMiliseconds = bcdValue * 1000;
+        break;
+    }
+    }
+    return bcdMiliseconds;
+}
+
 void S7Adapter::DBG_printConfigElements()
 
 {
@@ -910,7 +1007,7 @@ void S7Adapter::DBG_printConfigElements()
         cout << endl;
         cout << "<---New config--->" << endl;
         cout << "mode:      ";
-        (i.first.mode == ReadMode::AREA) ? cout << "AREA" : cout << "SIGNLE";
+        (i.first.mode == ReadMode::AREA) ? cout << "AREA" : cout << "SINGLE";
         cout << endl;
         cout << "target:    " << int(i.first.target) << endl;
         cout << "offset:    " << i.first.offset << endl;
@@ -928,9 +1025,9 @@ void S7Adapter::DBG_printConfigElements()
             cout << "id:       " << t.id << endl;
             cout << "name:     " << t.name << endl;
             cout << "target:   " << int(t.target) << endl;
-            cout << "dbNumber: " << t.dbNumber << endl;
+            cout << "number:   " << t.number << endl;
             cout << "offset:   " << t.offset << endl;
-            cout << "type:     " << int(t.type) << endl;
+            cout << "type:     " << S7TypeToString(t.type) << endl;
             cout << "bit:      " << int(t.bit) << endl;
         }
     }

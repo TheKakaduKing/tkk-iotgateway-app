@@ -45,9 +45,9 @@ struct TagItem
     u32 id{0};
     std::string name{""};
     u8 target{0};
-    u32 dbNumber{0};
-    u32 offset{0};
+    u32 number{0};
     S7Type type{0};
+    u32 offset{0};
     u8 bit{0};
 };
 
@@ -55,7 +55,7 @@ struct ReadHeader
 {
     ReadMode mode{ReadMode::SINGLE};
     u8 target{0};
-    u32 dbNumber{0};
+    u32 number{0};
     u32 offset{0};
     u32 amount{0};
 
@@ -104,6 +104,7 @@ private:
     TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
     S7Type stringToS7Type(const std::string &type_);
     std::string S7TypeToString(const S7Type type_);
+    u32 S5TimeToMilis(const u16 time_);
     int getTypeSize(S7Type type_);
     void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
