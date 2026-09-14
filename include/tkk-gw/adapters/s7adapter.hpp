@@ -106,6 +106,7 @@ private:
     std::string S7TypeToString(const S7Type type_);
     u32 S5TimeToMilis(const u16 time_);
     int getTypeSize(S7Type type_);
+    int getTypeDataSize(S7Type type_);
     void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
     std::vector<ReadConfigItem> createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);

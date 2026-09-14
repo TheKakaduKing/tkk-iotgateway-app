@@ -25,18 +25,9 @@ void S7Adapter::init()
         totalDataSize = 0;
         for (const auto &item : snap7Config)
         {
-            if (item.first.mode == ReadMode::AREA)
+            for (const auto &subItem : item.second)
             {
-                totalDataSize += item.first.amount;
-                continue;
-            }
-            if (item.first.mode == ReadMode::SINGLE)
-            {
-                for (const auto &subItem : item.second)
-                {
-                    totalDataSize += getTypeSize(subItem.type);
-                }
-                continue;
+                totalDataSize += getTypeDataSize(subItem.type);
             }
         }
         currentDatapPoints.reserve(totalDataSize);
@@ -311,6 +302,18 @@ int S7Adapter::getTypeSize(S7Type type_)
     default:
         return 64;
         break;
+    }
+}
+
+int S7Adapter::getTypeDataSize(S7Type type_)
+{
+    if (type_ == S7Type::TIMER || type_ == S7Type::S5TIME)
+    {
+        return sizeof(u32);
+    }
+    else
+    {
+        return getTypeSize(type_);
     }
 }
 
@@ -627,14 +630,7 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
     size_t bufferSize{0};
     for (const auto &item : config_.second)
     {
-        if (item.type == S7Type::TIMER || item.type == S7Type::S5TIME)
-        {
-            bufferSize += sizeof(u32);
-        }
-        else
-        {
-            bufferSize += getTypeSize(item.type);
-        }
+        bufferSize += getTypeDataSize(item.type);
     }
 
     std::vector<u8> buffer(bufferSize);
