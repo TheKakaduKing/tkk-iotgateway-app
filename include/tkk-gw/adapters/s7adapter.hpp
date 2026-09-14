@@ -101,7 +101,8 @@ private:
     void parseConfigFile();
     void configureAdapter();
     TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
-    S7Type parseS7Type(const std::string &type_);
+    S7Type stringToS7Type(const std::string &type_);
+    std::string S7TypeToString(const S7Type type_);
     int getTypeSize(S7Type type_);
     void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);

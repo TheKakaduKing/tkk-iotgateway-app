@@ -306,7 +306,7 @@ TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_
     {
         item.offset = tag_.value("offset", 0);
     }
-    item.type = parseS7Type(tag_.value("type", "unkownType"));
+    item.type = stringToS7Type(tag_.value("type", "unkownType"));
     if (tag_.contains("bit") && item.type == S7Type::BOOL)
     {
         item.bit = tag_.value("bit", 0);
@@ -317,7 +317,13 @@ TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_
     return item;
 }
 
-S7Type S7Adapter::parseS7Type(const std::string &type_)
+/**
+ * @brief Convert a string to S7Type enum
+ *
+ * @param type_
+ * @return S7Type
+ */
+S7Type S7Adapter::stringToS7Type(const std::string &type_)
 {
     if (type_ == "BOOL")
     {
@@ -415,6 +421,137 @@ S7Type S7Adapter::parseS7Type(const std::string &type_)
 }
 
 /**
+ * @brief Convert a S7Type enum to string
+ *
+ * @param type_
+ * @return S7Type
+ */
+std::string S7Adapter::S7TypeToString(const S7Type type_)
+{
+    switch (type_)
+    {
+    case S7Type::BOOL:
+    {
+        return "BOOL";
+        break;
+    }
+    case S7Type::BYTE:
+    {
+        return "BYTE";
+        break;
+    }
+    case S7Type::WORD:
+    {
+        return "WORD";
+        break;
+    }
+    case S7Type::DWORD:
+    {
+        return "DWORD";
+        break;
+    }
+    case S7Type::LWORD:
+    {
+        return "LWORD";
+        break;
+    }
+    case S7Type::SINT:
+    {
+        return "SINT";
+        break;
+    }
+    case S7Type::INT:
+    {
+        return "INT";
+        break;
+    }
+    case S7Type::DINT:
+    {
+        return "DINT";
+        break;
+    }
+    case S7Type::USINT:
+    {
+        return "USINT";
+        break;
+    }
+    case S7Type::UINT:
+    {
+        return "UINT";
+        break;
+    }
+    case S7Type::UDINT:
+    {
+        return "UDINT";
+        break;
+    }
+    case S7Type::LINT:
+    {
+        return "LINT";
+        break;
+    }
+    case S7Type::ULINT:
+    {
+        return "ULINT";
+        break;
+    }
+    case S7Type::REAL:
+    {
+        return "REAL";
+        break;
+    }
+    case S7Type::LREAL:
+    {
+        return "LREAL";
+        break;
+    }
+    case S7Type::CHAR:
+    {
+        return "CHAR";
+        break;
+    }
+    case S7Type::WCHAR:
+    {
+        return "WCHAR";
+        break;
+    }
+    case S7Type::STRING:
+    {
+        return "STRING";
+        break;
+    }
+    case S7Type::S5TIME:
+    {
+        return "S5TIME";
+        break;
+    }
+    case S7Type::TIME:
+    {
+        return "TIME";
+        break;
+    }
+    case S7Type::LTIME:
+    {
+        return "LTIME";
+        break;
+    }
+    case S7Type::TIMER:
+    {
+        return "TIMER";
+        break;
+    }
+    case S7Type::COUNTER:
+    {
+        return "COUNTER";
+        break;
+    }
+    default:
+        break;
+    }
+    return "INVALID";
+}
+
+/**
  * @brief Read data from given endpoint
  *
  * @return std::vector<DataPoint>
@@ -482,11 +619,13 @@ void S7Adapter::createDataPoints()
             tempDP.Quality = 0; // FIX
             tempDP.name = item.name;
             tempDP.timestamp = std::chrono::system_clock::now();
+            tempDP.type = S7TypeToString(item.type);
             tempDP.data = cvrtBytesToType(extractBytes(readBuffer, item.offset, getTypeSize(item.type)), item.type, item.bit);
 
             currentDatapPoints.push_back(tempDP);
         }
     }
+    DBG_printCurrentDPElements();
 }
 
 /**
@@ -762,6 +901,7 @@ void S7Adapter::DBG_printCurrentDPElements()
         cout << "Quality:  " << dp.Quality << endl;
         cout << "name:     " << dp.name << endl;
         cout << "time:     " << dp.timestamp << endl;
+        cout << "type:     " << dp.type << endl;
         cout << "data:     ";
         visit([](const auto &value)
               { cout << value; }, dp.data);
