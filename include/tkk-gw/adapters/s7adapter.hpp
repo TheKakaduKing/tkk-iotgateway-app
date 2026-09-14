@@ -84,10 +84,11 @@ private:
     S7Connection connectionConfig{};
     std::unique_ptr<TSnap7MicroClient> client;
     bool status{false};
+    u32 totalDataSize{0};
     const std::string configPath;
     nlohmann::json configDataJson;
     ReadConfig snap7Config{};
-    std::vector<u8> readBuffer{};
+    std::vector<u8> commonReadBuffer{};
     std::vector<DataPoint> previousDatapPoints{};
     std::vector<DataPoint> currentDatapPoints{};
 

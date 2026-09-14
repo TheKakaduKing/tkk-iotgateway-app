@@ -21,6 +21,16 @@ void S7Adapter::init()
     if (client->PDULength > 0)
     {
         snap7Config = createReadConfig();
+        totalDataSize = 0;
+        for (const auto &item : snap7Config)
+        {
+            for (const auto &subItem : item.second)
+            {
+                totalDataSize += getTypeSize(subItem.type);
+            }
+        }
+        currentDatapPoints.reserve(totalDataSize);
+        previousDatapPoints.reserve(totalDataSize);
         // DBG_printConfigElements();
     }
     else
@@ -558,7 +568,6 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
  */
 std::vector<DataPoint> S7Adapter::readData()
 {
-    std::vector<DataPoint> dataVector;
     for (const auto &config : snap7Config)
     {
         if (config.first.mode == ReadMode::AREA)
@@ -570,7 +579,7 @@ std::vector<DataPoint> S7Adapter::readData()
             startSnap7SingleRead(config);
         }
     }
-    return dataVector;
+    return currentDatapPoints;
 }
 
 /**
@@ -585,10 +594,11 @@ void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
     const auto start = config_.first.offset;
     const auto amount = config_.first.amount;
     const auto wordLen = S7WLByte;
+    std::vector<u8> buffer(amount);
 
-    int result = client->ReadArea(area, dbNumber, start, amount, wordLen, readBuffer.data());
+    int result = client->ReadArea(area, dbNumber, start, amount, wordLen, buffer.data());
 
-    createDataPoints();
+    commonReadBuffer.insert(commonReadBuffer.end(), buffer.begin(), buffer.end());
 }
 
 /**
@@ -598,6 +608,35 @@ void S7Adapter::startSnap7AreaRead(const ReadConfigItem &config_)
  */
 void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
 {
+    std::vector<TS7DataItem> snap7DataItems{};
+    snap7DataItems.reserve(config_.second.size());
+
+    size_t bufferSize{0};
+    for (const auto &item : config_.second)
+    {
+        bufferSize += getTypeSize(item.type);
+    }
+
+    std::vector<u8> buffer(bufferSize);
+
+    size_t offset{0};
+    // Setup items for snap7
+    for (const auto &item : config_.second)
+    {
+        TS7DataItem tempTS7item{};
+        tempTS7item.Area = item.target;
+        tempTS7item.WordLen = S7WLByte;
+        tempTS7item.DBNumber = item.dbNumber;
+        tempTS7item.Start = item.offset;
+        tempTS7item.Amount = getTypeSize(item.type);
+        tempTS7item.pdata = buffer.data() + offset;
+        snap7DataItems.push_back(tempTS7item);
+
+        offset += tempTS7item.Amount;
+    }
+    int result = client->ReadMultiVars(snap7DataItems.data(), snap7DataItems.size());
+
+    commonReadBuffer.insert(commonReadBuffer.end(), buffer.begin(), buffer.end());
 }
 
 /**
@@ -608,8 +647,14 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
  */
 void S7Adapter::createDataPoints()
 {
+    // Swap DP buffers
+    std::swap(currentDatapPoints, previousDatapPoints);
     currentDatapPoints.clear();
 
+    size_t offset{0};
+
+    // Start filling DataPoints
+    // This creates Datapoints out the commonReadBuffer
     for (const auto &config : snap7Config)
     {
         for (const auto &item : config.second)
@@ -620,9 +665,11 @@ void S7Adapter::createDataPoints()
             tempDP.name = item.name;
             tempDP.timestamp = std::chrono::system_clock::now();
             tempDP.type = S7TypeToString(item.type);
-            tempDP.data = cvrtBytesToType(extractBytes(readBuffer, item.offset, getTypeSize(item.type)), item.type, item.bit);
+            tempDP.data = cvrtBytesToType(extractBytes(commonReadBuffer, offset, getTypeSize(item.type)), item.type, item.bit);
 
             currentDatapPoints.push_back(tempDP);
+
+            offset += getTypeSize(item.type);
         }
     }
     DBG_printCurrentDPElements();
