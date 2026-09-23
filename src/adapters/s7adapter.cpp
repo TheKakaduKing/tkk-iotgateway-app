@@ -150,6 +150,8 @@ std::expected<void, ConfigError> S7Adapter::validateJsonConnection(const Json &c
  */
 std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const Json &config_)
 {
+    std::unordered_set<int> seenIDs;
+
     for (const auto &block : config_)
     {
         if (!block.contains("mode"))
@@ -167,7 +169,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const Json &co
         }
         if (mode == "area")
         {
-            auto result = validateJsonAreaBlock(block);
+            auto result = validateJsonAreaBlock(block, seenIDs);
             if (!result)
             {
                 return result;
@@ -175,7 +177,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const Json &co
         }
         if (mode == "single")
         {
-            auto result = validateJsonSingleBlock(block);
+            auto result = validateJsonSingleBlock(block, seenIDs);
             if (!result)
             {
                 return result;
@@ -190,7 +192,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const Json &co
  * @param config_
  * @return std::expected<void, ConfigError>
  */
-std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const Json &config_)
+std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const Json &config_, uset_i &seenIDs)
 {
     if (!config_.contains("target"))
     {
@@ -239,7 +241,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const Json &co
     const auto &tags = config_.at("tags");
     for (const auto &tag : tags)
     {
-        auto result = validateJsonTagItemArea(tag);
+        auto result = validateJsonTagItemArea(tag, seenIDs);
         if (!result)
         {
             return result;
@@ -253,7 +255,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const Json &co
  * @param config_
  * @return std::expected<void, ConfigError>
  */
-std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const Json &config_)
+std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const Json &config_, uset_i &seenIDs)
 {
     if (!config_.contains("tags"))
     {
@@ -266,7 +268,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const Json &
     const auto &tags = config_.at("tags");
     for (const auto &tag : tags)
     {
-        auto result = validateJsonTagItemSingle(tag);
+        auto result = validateJsonTagItemSingle(tag, seenIDs);
         if (!result)
         {
             return result;
@@ -280,7 +282,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const Json &
  * @param tag_
  * @return std::expected<void, ConfigError>
  */
-std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const Json &tag_)
+std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const Json &tag_, uset_i &seenIDs)
 {
     if (!tag_.contains("id"))
     {
@@ -350,7 +352,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const Json &
  * @param tag_
  * @return std::expected<void, ConfigError>
  */
-std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const Json &tag_)
+std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const Json &tag_, uset_i &seenIDs)
 {
     if (!tag_.contains("id"))
     {

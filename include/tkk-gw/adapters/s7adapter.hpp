@@ -82,6 +82,8 @@ class S7Adapter : public IDataSourceAdapter
 {
     using ReadConfigItem = std::pair<ReadHeader, std::vector<TagItem>>;
     using ReadConfig = std::vector<ReadConfigItem>;
+    using Json = nlohmann::json_abi_v3_12_0::json;
+    using uset_i = std::unordered_set<int>;
 
 private:
     S7Connection connectionConfig{};
@@ -96,7 +98,6 @@ private:
     std::vector<u8> commonReadBuffer{};
     std::vector<DataPoint> previousDatapPoints{};
     std::vector<DataPoint> currentDatapPoints{};
-    std::unordered_set<int> seenIDs;
 
     void connect() const override;
     void disconnect() const override;
@@ -107,21 +108,21 @@ private:
     std::expected<void, ConfigError> openAndParseConfigFile();
     void configureAdapter();
     std::expected<void, ConfigError> validateJsonScheme();
-    std::expected<void, ConfigError> validateJsonConnection(const nlohmann::json_abi_v3_12_0::json &config_);
-    std::expected<void, ConfigError> validateJsonReadBlock(const nlohmann::json_abi_v3_12_0::json &config_);
-    std::expected<void, ConfigError> validateJsonAreaBlock(const nlohmann::json_abi_v3_12_0::json &config_);
-    std::expected<void, ConfigError> validateJsonSingleBlock(const nlohmann::json_abi_v3_12_0::json &config_);
-    std::expected<void, ConfigError> validateJsonTagItemArea(const nlohmann::json_abi_v3_12_0::json &tag_);
-    std::expected<void, ConfigError> validateJsonTagItemSingle(const nlohmann::json_abi_v3_12_0::json &tag_);
-    TagItem createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_);
+    std::expected<void, ConfigError> validateJsonConnection(const Json &config_);
+    std::expected<void, ConfigError> validateJsonReadBlock(const Json &config_);
+    std::expected<void, ConfigError> validateJsonAreaBlock(const Json &config_, uset_i &seenIDs);
+    std::expected<void, ConfigError> validateJsonSingleBlock(const Json &config_, uset_i &seenIDs);
+    std::expected<void, ConfigError> validateJsonTagItemArea(const Json &tag_, uset_i &seenIDs);
+    std::expected<void, ConfigError> validateJsonTagItemSingle(const Json &tag_, uset_i &seenIDs);
+    TagItem createTagItem(ReadMode mode_, const Json &tag_);
     S7Type stringToS7Type(const std::string &type_);
     std::string S7TypeToString(const S7Type type_);
     u32 S5TimeToMilis(const u16 time_);
     int getTypeSize(S7Type type_);
     int getTypeDataSize(S7Type type_);
     void setupConnConfig();
-    ReadConfigItem createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
-    std::vector<ReadConfigItem> createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_);
+    ReadConfigItem createAreaReadConfigItem(const Json &block_);
+    std::vector<ReadConfigItem> createSingleReadConfigItem(const Json &block_);
     ReadConfig createReadConfig();
     int cvrtTargetToSnap7Area(const std::string &target_);
     void startSnap7AreaRead(const ReadConfigItem &config_);
