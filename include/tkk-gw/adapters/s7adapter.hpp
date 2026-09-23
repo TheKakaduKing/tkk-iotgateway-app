@@ -91,7 +91,6 @@ private:
     S7Connection connectionConfig{};
     std::unique_ptr<TSnap7MicroClient> client;
     bool status{false};
-    u32 totalDataSize{0};
     u32 totalReadSize{0};
     u32 totalDpItems{0};
     const std::string configPath;

@@ -26,6 +26,8 @@ void S7Adapter::init()
         snap7Config = createReadConfig();
         postConfigChecks();
 
+        totalReadSize = 0;
+
         for (const auto &item : snap7Config)
         {
             for (const auto &subItem : item.second)
@@ -42,7 +44,7 @@ void S7Adapter::init()
     }
     else
     {
-        exit;
+        exit(1);
     }
     auto test = readData();
     // DBG_printConfigElements();
@@ -1032,6 +1034,8 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
  */
 std::vector<DataPoint> S7Adapter::readData()
 {
+    commonReadBuffer.clear(); // Clear read buffer, still has reserved size but end() iterator is at the start again
+
     for (const auto &config : snap7Config)
     {
         if (config.first.mode == ReadMode::AREA)
@@ -1190,22 +1194,22 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, const TagItem
     case S7Type::BOOL:
     {
         u8 raw{};
-        std::memcpy(&raw, bytes_.data(), sizeof(raw));
-        return bool((raw & (1 << item_.bit)) != 0);
+        raw = bytes_[0];
+        return (raw & (1 << item_.bit) != 0);
     }
         // Unsigned 1 byte
     case S7Type::BYTE:
     case S7Type::USINT:
     {
         u8 value{};
-        std::memcpy(&value, bytes_.data(), sizeof(value));
+        value = bytes_[0];
         return value;
     }
         // Signed 1 byte
     case S7Type::SINT:
     {
         i8 value{};
-        std::memcpy(&value, bytes_.data(), sizeof(value));
+        value = bytes_[0];
         return value;
     }
         // Signed 2 byte
@@ -1278,18 +1282,34 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, const TagItem
         // String
     case S7Type::CHAR:
     {
-        char value{};
-        std::memcpy(&value, bytes_.data(), sizeof(value));
+        std::string value{};
+        value = latin1ToUtf8(bytes_);
         return value;
     }
     case S7Type::WCHAR:
     {
-        return 5;
+        std::string value{};
+        value = utf16ToUtf8(bytes_);
+        return value;
     }
     case S7Type::STRING:
+    {
+        std::string value{};
+
+        int maxLength = std::min(item_.length, static_cast<u32>(bytes_[0])); // First byte: max length of string
+        value = latin1ToUtf8(bytes_.subspan(2, maxLength));                  // Offst 2 byte (max/actual len)
+        return value;
+    }
     case S7Type::WSTRING:
     {
-        return 5;
+        std::string value{};
+        u16 len{};
+
+        std::memcpy(&len, bytes_.data(), sizeof(len)); // First 2 byte: max length of string
+        len = std::byteswap(len);
+        int maxLength = std::min(item_.length, static_cast<u32>(len));
+        value = latin1ToUtf8(bytes_.subspan(4, 2 * maxLength)); // Offset 4 byte (max/actual len)
+        return value;
     }
     // Timer
     case S7Type::S5TIME:
