@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include "tkk-gw/adapters/s7adapter.hpp"
 #include "snap7micro/s7_types.h"
+#include "utfcpp/utf8.h"
 
 S7Adapter::S7Adapter(const std::string &configPath_) : client{std::make_unique<TSnap7MicroClient>()},
                                                        status{false},
@@ -586,7 +587,6 @@ S7Adapter::ReadConfig S7Adapter::createReadConfig()
         if (b.at("mode").get<std::string>() == "area")
         {
             configVector.push_back(createAreaReadConfigItem(b));
-            std::cout << "AreaRead config created" << std::endl;
             continue;
         }
         if (b.at("mode").get<std::string>() == "single")
@@ -595,7 +595,6 @@ S7Adapter::ReadConfig S7Adapter::createReadConfig()
             for (const auto &config : readConfigItemMemory)
             {
                 configVector.push_back(config);
-                std::cout << "SingleRead config created" << std::endl;
             }
             continue;
         }
@@ -663,6 +662,7 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::UINT:
     case S7Type::WCHAR:
     case S7Type::S5TIME:
+    case S7Type::DATE:
     case S7Type::TIMER:
     case S7Type::COUNTER:
     {
@@ -674,21 +674,24 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::UDINT:
     case S7Type::REAL:
     case S7Type::TIME:
+    case S7Type::TOD:
     {
         return sizeof(u32);
         break;
     }
-    case S7Type::LWORD:
-    case S7Type::LINT:
-    case S7Type::ULINT:
     case S7Type::LREAL:
-    case S7Type::LTIME:
+    case S7Type::DT:
     {
         return sizeof(u64);
         break;
     }
+    case S7Type::DTL:
+    {
+        return 12; // 12 byte struct
+        break;
+    }
     default:
-        return 64;
+        return -1;
         break;
     }
 }
@@ -727,20 +730,20 @@ TagItem S7Adapter::createTagItem(ReadMode mode_, const Json &tag_)
 
     if (mode_ == ReadMode::SINGLE)
     {
-        item.target = cvrtTargetToSnap7Area(tag_.value("target", "N/A"));
+        item.target = cvrtTargetToSnap7Area(tag_.at("target"));
     }
     if (tag_.contains("number"))
     {
-        item.number = tag_.value("number", -1);
+        item.number = tag_.value("number", 0);
     }
     if (tag_.contains("offset"))
     {
-        item.offset = tag_.value("offset", -1);
+        item.offset = tag_.value("offset", 0);
     }
-    item.type = stringToS7Type(tag_.value("type", "N/A"));
-    if (tag_.contains("bit") && item.type == S7Type::BOOL)
+    item.type = stringToS7Type(tag_.at("type"));
+    if (item.type == S7Type::BOOL)
     {
-        item.bit = tag_.value("bit", -1);
+        item.bit = tag_.at("bit");
     }
     return item;
 }
@@ -769,10 +772,6 @@ S7Type S7Adapter::stringToS7Type(const std::string &type_)
     {
         return S7Type::DWORD;
     }
-    if (type_ == "LWORD")
-    {
-        return S7Type::LWORD;
-    }
     if (type_ == "SINT")
     {
         return S7Type::SINT;
@@ -797,14 +796,6 @@ S7Type S7Adapter::stringToS7Type(const std::string &type_)
     {
         return S7Type::UDINT;
     }
-    if (type_ == "LINT")
-    {
-        return S7Type::LINT;
-    }
-    if (type_ == "ULINT")
-    {
-        return S7Type::ULINT;
-    }
     if (type_ == "REAL")
     {
         return S7Type::REAL;
@@ -825,6 +816,10 @@ S7Type S7Adapter::stringToS7Type(const std::string &type_)
     {
         return S7Type::STRING;
     }
+    if (type_ == "WSTRING")
+    {
+        return S7Type::WSTRING;
+    }
     if (type_ == "S5TIME")
     {
         return S7Type::S5TIME;
@@ -833,9 +828,21 @@ S7Type S7Adapter::stringToS7Type(const std::string &type_)
     {
         return S7Type::TIME;
     }
-    if (type_ == "LITME")
+    if (type_ == "DATE")
     {
-        return S7Type::LTIME;
+        return S7Type::DATE;
+    }
+    if (type_ == "TOD")
+    {
+        return S7Type::TOD;
+    }
+    if (type_ == "DT")
+    {
+        return S7Type::DT;
+    }
+    if (type_ == "DTL")
+    {
+        return S7Type::DTL;
     }
     if (type_ == "TIMER")
     {
@@ -878,11 +885,6 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
         return "DWORD";
         break;
     }
-    case S7Type::LWORD:
-    {
-        return "LWORD";
-        break;
-    }
     case S7Type::SINT:
     {
         return "SINT";
@@ -913,16 +915,6 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
         return "UDINT";
         break;
     }
-    case S7Type::LINT:
-    {
-        return "LINT";
-        break;
-    }
-    case S7Type::ULINT:
-    {
-        return "ULINT";
-        break;
-    }
     case S7Type::REAL:
     {
         return "REAL";
@@ -948,6 +940,11 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
         return "STRING";
         break;
     }
+    case S7Type::WSTRING:
+    {
+        return "WSTRING";
+        break;
+    }
     case S7Type::S5TIME:
     {
         return "S5TIME";
@@ -958,9 +955,24 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
         return "TIME";
         break;
     }
-    case S7Type::LTIME:
+    case S7Type::DATE:
     {
-        return "LTIME";
+        return "DATE";
+        break;
+    }
+    case S7Type::TOD:
+    {
+        return "TOD";
+        break;
+    }
+    case S7Type::DT:
+    {
+        return "DT";
+        break;
+    }
+    case S7Type::DTL:
+    {
+        return "DTL";
         break;
     }
     case S7Type::TIMER:
@@ -997,7 +1009,6 @@ std::vector<DataPoint> S7Adapter::readData()
             startSnap7SingleRead(config);
         }
     }
-    std::cout << "Reads finished, size:     " << commonReadBuffer.size() << std::endl;
     return currentDatapPoints;
 }
 
@@ -1136,7 +1147,7 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_,
 
     if (bytes_.size() != size)
     {
-        return u32(99); // ERH
+        return i32(-1); // ERH
     }
 
     switch (type_)
@@ -1145,27 +1156,23 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_,
     case S7Type::BOOL:
     {
         u8 raw{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u8));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         return bool((raw & (1 << bit_)) != 0);
-        break;
     }
         // Unsigned 1 byte
     case S7Type::BYTE:
-    case S7Type::CHAR:
     case S7Type::USINT:
     {
         u8 value{};
-        std::memcpy(&value, bytes_.data(), sizeof(u8));
+        std::memcpy(&value, bytes_.data(), sizeof(value));
         return value;
-        break;
     }
         // Signed 1 byte
     case S7Type::SINT:
     {
         i8 value{};
-        std::memcpy(&value, bytes_.data(), sizeof(i8));
+        std::memcpy(&value, bytes_.data(), sizeof(value));
         return value;
-        break;
     }
         // Signed 2 byte
     case S7Type::WORD:
@@ -1173,138 +1180,112 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_,
     {
         i16 raw{};
         i16 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(i16));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(i16));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
     }
         // Signed 4 byte
     case S7Type::DWORD:
     case S7Type::DINT:
+    case S7Type::TIME:
     {
         i32 raw{};
         i32 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(i32));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(i32));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
-    }
-        // Signed 8 byte
-    case S7Type::LWORD:
-    case S7Type::LINT:
-    {
-        i64 raw{};
-        i64 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(i64));
-        raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(i64));
-        return value;
-        break;
     }
         // Unsigned 2 byte
     case S7Type::UINT:
-    case S7Type::WCHAR:
+    case S7Type::DATE:
     {
         u16 raw{};
         u16 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u16));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(u16));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
     }
         // Unsigned 4 byte
     case S7Type::UDINT:
+    case S7Type::TOD:
     {
         u32 raw{};
         u32 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u32));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(u32));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
-    }
-        // Unsigned 8 byte
-    case S7Type::ULINT:
-    {
-        u64 raw{};
-        u64 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u64));
-        raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(u64));
-        return value;
-        break;
     }
     // IEEE Standard 4 byte float
     case S7Type::REAL:
     {
         u32 raw{};
         f32 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u32));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(f32));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
     }
     // IEEE Standard 8 byte double
+    // Date and Time
     case S7Type::LREAL:
+    case S7Type::DT:
     {
         u64 raw{};
         f64 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u64));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(f64));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
     }
         // String
+    case S7Type::CHAR:
+    {
+        char value{};
+        std::memcpy(&value, bytes_.data(), sizeof(value));
+        return value;
+    }
+    case S7Type::WCHAR:
+    {
+        return 5;
+    }
     case S7Type::STRING:
+    case S7Type::WSTRING:
     {
-        break;
-    }
-    // BCD
-    case S7Type::S5TIME:
-    {
-        break;
-    }
-    // IEC Time
-    case S7Type::TIME:
-    {
-        break;
-    }
-    // IEC LTime
-    case S7Type::LTIME:
-    {
-        break;
+        return 5;
     }
     // Timer
+    case S7Type::S5TIME:
     case S7Type::TIMER:
     {
         u16 raw{};
         u16 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u16));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(u16));
+        std::memcpy(&value, &raw, sizeof(value));
         return S5TimeToMilis(value);
-        break;
     }
     // Counter
     case S7Type::COUNTER:
     {
         u16 raw{};
         u16 value{};
-        std::memcpy(&raw, bytes_.data(), sizeof(u16));
+        std::memcpy(&raw, bytes_.data(), sizeof(raw));
         raw = std::byteswap(raw);
-        std::memcpy(&value, &raw, sizeof(u16));
+        std::memcpy(&value, &raw, sizeof(value));
         return value;
-        break;
+    }
+    // DTL
+    case S7Type::DTL:
+    {
+        return 5;
     }
 
     default:
-        return u32(98);
-        break;
+        return i32(-2);
     }
 }
 
@@ -1399,6 +1380,26 @@ u32 S7Adapter::S5TimeToMilis(const u16 time_)
     }
     return bcdMiliseconds;
 }
+
+std::string S7Adapter::latin1ToUtf8(std::span<const u8> bytes_)
+{
+    std::string result;
+    for (auto c : bytes_)
+        utf8::append(static_cast<char32_t>(c), result);
+    return result;
+}
+
+std::string S7Adapter::utf16ToUtf8(std::span<const u8> bytes_)
+{
+    std::u16string u16;
+    for (size_t i = 0; i + 1 < bytes_.size(); i += 2)
+        u16.push_back(static_cast<char16_t>(bytes_[i] << 8 | bytes_[i + 1]));
+
+    std::string result;
+    utf8::utf16to8(u16.begin(), u16.end(), std::back_inserter(result));
+    return result;
+}
+
 void S7Adapter::DBG_printConfigElements()
 
 {

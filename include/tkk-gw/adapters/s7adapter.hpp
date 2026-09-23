@@ -15,23 +15,24 @@ enum class S7Type
     BYTE,
     WORD,
     DWORD,
-    LWORD,
     SINT,
     INT,
     DINT,
     USINT,
     UINT,
     UDINT,
-    LINT,
-    ULINT,
     REAL,
     LREAL,
     CHAR,
     WCHAR,
     STRING,
+    WSTRING,
     S5TIME,
     TIME,
-    LTIME,
+    DATE,
+    TOD,
+    DT,
+    DTL,
     TIMER,
     COUNTER,
     INVALID,
@@ -131,6 +132,9 @@ private:
 
     std::span<const u8> extractBytes(std::span<const u8> buffer_, u32 offset_, u32 length);
     GenericType cvrtBytesToType(std::span<const u8> bytes_, S7Type type_, u8 bit_);
+
+    std::string latin1ToUtf8(std::span<const u8> bytes_);
+    std::string utf16ToUtf8(std::span<const u8> bytes_);
 
     void DBG_printConfigElements();
     void DBG_printCurrentDPElements();
