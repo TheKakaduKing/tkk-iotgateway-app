@@ -345,6 +345,17 @@ std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const Json &
             return std::unexpected(ConfigError::OutOfBound);
         }
     }
+    if (s7type == S7Type::STRING || s7type == S7Type::WSTRING)
+    {
+        if (!tag_.contains("length"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!tag_.at("length").is_number_unsigned())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
+        }
+    }
     return {};
 }
 /**
@@ -451,6 +462,17 @@ std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const Json
         if (bit < 0 || bit > 7)
         {
             return std::unexpected(ConfigError::OutOfBound);
+        }
+    }
+    if (s7type == S7Type::STRING || s7type == S7Type::WSTRING)
+    {
+        if (!tag_.contains("length"))
+        {
+            return std::unexpected(ConfigError::MissingKey);
+        }
+        if (!tag_.at("length").is_number_unsigned())
+        {
+            return std::unexpected(ConfigError::TypeMismatch);
         }
     }
     return {};
