@@ -69,7 +69,11 @@ std::expected<void, ConfigError> S7Adapter::openAndParseConfigFile()
     }
     return {};
 }
-
+/**
+ * @brief Validate the Json config file scheme
+ *
+ * @return std::expected<void, ConfigError>
+ */
 std::expected<void, ConfigError> S7Adapter::validateJsonScheme()
 {
     if (!configDataJson.contains("connection"))
@@ -103,7 +107,7 @@ std::expected<void, ConfigError> S7Adapter::validateJsonScheme()
  * @param config_
  * @return std::expected<void, ConfigError>
  */
-std::expected<void, ConfigError> S7Adapter::validateJsonConnection(const nlohmann::json_abi_v3_12_0::json &config_)
+std::expected<void, ConfigError> S7Adapter::validateJsonConnection(const Json &config_)
 {
     if (!config_.contains("ip"))
     {
@@ -138,8 +142,13 @@ std::expected<void, ConfigError> S7Adapter::validateJsonConnection(const nlohman
     }
     return {};
 }
-
-std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const nlohmann::json_abi_v3_12_0::json &config_)
+/**
+ * @brief Validate the Json file Read Block
+ *
+ * @param config_
+ * @return std::expected<void, ConfigError>
+ */
+std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const Json &config_)
 {
     for (const auto &block : config_)
     {
@@ -175,8 +184,13 @@ std::expected<void, ConfigError> S7Adapter::validateJsonReadBlock(const nlohmann
     }
     return {};
 }
-
-std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const nlohmann::json_abi_v3_12_0::json &config_)
+/**
+ * @brief Validate the Json file Area Read block
+ *
+ * @param config_
+ * @return std::expected<void, ConfigError>
+ */
+std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const Json &config_)
 {
     if (!config_.contains("target"))
     {
@@ -233,8 +247,13 @@ std::expected<void, ConfigError> S7Adapter::validateJsonAreaBlock(const nlohmann
     }
     return {};
 }
-
-std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const nlohmann::json_abi_v3_12_0::json &config_)
+/**
+ * @brief Validate the Json file Single(Multivar) Read block
+ *
+ * @param config_
+ * @return std::expected<void, ConfigError>
+ */
+std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const Json &config_)
 {
     if (!config_.contains("tags"))
     {
@@ -255,8 +274,13 @@ std::expected<void, ConfigError> S7Adapter::validateJsonSingleBlock(const nlohma
     }
     return {};
 }
-
-std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const nlohmann::json_abi_v3_12_0::json &tag_)
+/**
+ * @brief Validate a tag item for Area Read Block
+ *
+ * @param tag_
+ * @return std::expected<void, ConfigError>
+ */
+std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const Json &tag_)
 {
     if (!tag_.contains("id"))
     {
@@ -320,8 +344,13 @@ std::expected<void, ConfigError> S7Adapter::validateJsonTagItemArea(const nlohma
     }
     return {};
 }
-
-std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const nlohmann::json_abi_v3_12_0::json &tag_)
+/**
+ * @brief Validate a tag item for Single(Multivar) Read Block
+ *
+ * @param tag_
+ * @return std::expected<void, ConfigError>
+ */
+std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const Json &tag_)
 {
     if (!tag_.contains("id"))
     {
@@ -431,10 +460,6 @@ std::expected<void, ConfigError> S7Adapter::validateJsonTagItemSingle(const nloh
 void S7Adapter::setupConnConfig()
 {
     const auto &con = configDataJson.at("connection");
-    if (!con.contains("ip") || !con["ip"].is_string())
-    {
-        return;
-    }
     connectionConfig.ip = con.at("ip").get<std::string>();
     connectionConfig.rack = con.value("rack", 0);
     connectionConfig.slot = con.value("slot", 2);
@@ -446,7 +471,7 @@ void S7Adapter::setupConnConfig()
  * @param block_
  * @return S7Adapter::ReadConfigItem
  */
-S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_)
+S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const Json &block_)
 {
     ReadConfigItem tempConfigItem{};
     ReadHeader tempReadHeader{};
@@ -475,7 +500,7 @@ S7Adapter::ReadConfigItem S7Adapter::createAreaReadConfigItem(const nlohmann::js
  * @param block_
  * @return S7Adapter::ReadConfigItem
  */
-std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(const nlohmann::json_abi_v3_12_0::json &block_)
+std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(const Json &block_)
 {
     std::vector<ReadConfigItem> readConfigItemMemory{};
     ReadConfigItem tempConfigItem{}, tempConfigItemRef{};
@@ -692,7 +717,7 @@ int S7Adapter::getTypeDataSize(S7Type type_)
  * @param tag_
  * @return TagItem
  */
-TagItem S7Adapter::createTagItem(ReadMode mode_, const nlohmann::json_abi_v3_12_0::json &tag_)
+TagItem S7Adapter::createTagItem(ReadMode mode_, const Json &tag_)
 {
     TagItem item{};
     item.id = tag_.value("id", -1);
