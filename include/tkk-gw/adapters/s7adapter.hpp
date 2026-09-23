@@ -108,7 +108,6 @@ private:
     void writeData() const override;
 
     std::expected<void, ConfigError> openAndParseConfigFile();
-    void configureAdapter();
     std::expected<void, ConfigError> validateJsonScheme();
     std::expected<void, ConfigError> validateJsonConnection(const Json &config_);
     std::expected<void, ConfigError> validateJsonReadBlock(const Json &config_);
@@ -116,12 +115,17 @@ private:
     std::expected<void, ConfigError> validateJsonSingleBlock(const Json &config_, uset_i &seenIDs);
     std::expected<void, ConfigError> validateJsonTagItemArea(const Json &tag_, uset_i &seenIDs);
     std::expected<void, ConfigError> validateJsonTagItemSingle(const Json &tag_, uset_i &seenIDs);
+
+    void configureAdapter();
+    void setupConnConfig();
+    void postConfigChecks();
+    std::expected<void, ConfigError> checkItemsFitPdu();
+
     TagItem createTagItem(ReadMode mode_, const Json &tag_);
     S7Type stringToS7Type(const std::string &type_);
     std::string S7TypeToString(const S7Type type_);
     u32 S5TimeToMilis(const u16 time_);
     int getItemReadSize(const TagItem &item_);
-    void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const Json &block_);
     std::vector<ReadConfigItem> createSingleReadConfigItem(const Json &block_);
     ReadConfig createReadConfig();

@@ -24,6 +24,8 @@ void S7Adapter::init()
     if (client->PDULength > 0)
     {
         snap7Config = createReadConfig();
+        postConfigChecks();
+
         for (const auto &item : snap7Config)
         {
             for (const auto &subItem : item.second)
@@ -47,6 +49,37 @@ void S7Adapter::init()
     createDataPoints();
     std::cout << "Created DPs, size:  " << currentDatapPoints.size() << std::endl;
     // DBG_printCurrentDPElements();
+}
+
+void S7Adapter::postConfigChecks()
+{
+    auto result = checkItemsFitPdu();
+    if (!result)
+    {
+        std::cout << "Error occured during post config check:      " << ConfigErrorToString(result.error()) << std::endl;
+        exit(1);
+    }
+}
+
+std::expected<void, ConfigError> S7Adapter::checkItemsFitPdu()
+{
+    for (const auto &item : snap7Config)
+    {
+        if (item.first.mode == ReadMode::AREA)
+        {
+            continue;
+        }
+        // Only check item sizes against pdu size when using snap7 multivar read (Single)
+
+        for (const auto &subItem : item.second)
+        {
+            if (18 + getItemReadSize(subItem) > client->PDULength) // 18 byte overhead for 1 item
+            {
+                return std::unexpected(ConfigError::ItemNotFitPdu);
+            }
+        }
+    }
+    return {};
 }
 
 /**

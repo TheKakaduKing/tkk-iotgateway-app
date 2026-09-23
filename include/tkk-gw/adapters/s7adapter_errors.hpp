@@ -14,6 +14,7 @@ enum class ConfigError
     DuplicateID,
     OutOfBound,
     IpMismatch,
+    ItemNotFitPdu,
 
 };
 
@@ -67,6 +68,11 @@ static inline std::string ConfigErrorToString(ConfigError err_)
     case ConfigError::IpMismatch:
     {
         return "IP mismatch";
+        break;
+    }
+    case ConfigError::ItemNotFitPdu:
+    {
+        return "Item does not fit Pdu";
         break;
     }
 
