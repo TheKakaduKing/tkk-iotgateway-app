@@ -28,15 +28,13 @@ void S7Adapter::init()
         {
             for (const auto &subItem : item.second)
             {
-                totalReadSize += getTypeSize(subItem.type);
-                totalDataSize += getTypeDataSize(subItem.type);
+                totalReadSize += getItemReadSize(subItem);
             }
             totalDpItems += item.second.size();
         }
         commonReadBuffer.reserve(totalReadSize);
         currentDatapPoints.reserve(totalDpItems);
         previousDatapPoints.reserve(totalDpItems);
-        std::cout << "Total data size calculated (bytes):  " << totalDataSize << std::endl;
         std::cout << "Total read size calculated (bytes):  " << totalReadSize << std::endl;
         // DBG_printConfigElements();
     }
@@ -539,7 +537,7 @@ std::vector<S7Adapter::ReadConfigItem> S7Adapter::createSingleReadConfigItem(con
     for (const auto &tag : tags)
     {
         tempTagItem = createTagItem(tempConfigItem.first.mode, tag);
-        currentItemSize = 4 + getTypeSize(tempTagItem.type);
+        currentItemSize = 4 + getItemReadSize(tempTagItem);
         if (currentItemSize % 2 != 0)
         {
             currentItemSize += 1; // Must be 2 byte aligned
@@ -660,15 +658,9 @@ int S7Adapter::cvrtTargetToSnap7Area(const std::string &target_)
     return -1;
 }
 
-/**
- * @brief Return S7 type size in byte
- *
- * @param type_
- * @return int
- */
-int S7Adapter::getTypeSize(S7Type type_)
+int S7Adapter::getItemReadSize(const TagItem &item_)
 {
-    switch (type_)
+    switch (item_.type)
     {
     case S7Type::BOOL:
     case S7Type::BYTE:
@@ -677,7 +669,6 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::CHAR:
     {
         return sizeof(u8);
-        break;
     }
     case S7Type::WORD:
     case S7Type::INT:
@@ -689,7 +680,6 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::COUNTER:
     {
         return sizeof(u16);
-        break;
     }
     case S7Type::DWORD:
     case S7Type::DINT:
@@ -699,41 +689,26 @@ int S7Adapter::getTypeSize(S7Type type_)
     case S7Type::TOD:
     {
         return sizeof(u32);
-        break;
     }
     case S7Type::LREAL:
     case S7Type::DT:
     {
         return sizeof(u64);
-        break;
     }
     case S7Type::DTL:
     {
         return 12; // 12 byte struct
-        break;
+    }
+    case S7Type::STRING:
+    {
+        return 2 + item_.length; // First byte "max length", second byte "actual length"
+    }
+    case S7Type::WSTRING:
+    {
+        return 4 + 2 * item_.length; // First 2 byte "max length", second 2 byte "actual length"
     }
     default:
         return -1;
-        break;
-    }
-}
-
-/**
- * @brief Return needed data size in byte
- *
- * @param type_
- * @return int
- * @details E.g. a timer value is read via 2 bytes, but milisec. value needs to be 4 bytes
- */
-int S7Adapter::getTypeDataSize(S7Type type_)
-{
-    if (type_ == S7Type::TIMER || type_ == S7Type::S5TIME)
-    {
-        return sizeof(u32);
-    }
-    else
-    {
-        return getTypeSize(type_);
     }
 }
 
@@ -766,6 +741,10 @@ TagItem S7Adapter::createTagItem(ReadMode mode_, const Json &tag_)
     if (item.type == S7Type::BOOL)
     {
         item.bit = tag_.at("bit");
+    }
+    if (item.type == S7Type::STRING || item.type == S7Type::WSTRING)
+    {
+        item.length = tag_.at("length");
     }
     return item;
 }
@@ -1068,7 +1047,7 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
     size_t bufferSize{0};
     for (const auto &item : config_.second)
     {
-        bufferSize += getTypeSize(item.type);
+        bufferSize += getItemReadSize(item);
     }
 
     std::vector<u8> buffer(bufferSize);
@@ -1090,12 +1069,12 @@ void S7Adapter::startSnap7SingleRead(const ReadConfigItem &config_)
         else
         {
             tempTS7item.Start = item.offset;
-            tempTS7item.Amount = getTypeSize(item.type);
+            tempTS7item.Amount = getItemReadSize(item);
         }
         tempTS7item.pdata = buffer.data() + offset;
         snap7DataItems.push_back(tempTS7item);
 
-        offset += getTypeSize(item.type);
+        offset += getItemReadSize(item);
     }
     int result = client->ReadMultiVars(snap7DataItems.data(), snap7DataItems.size());
     std::cout << "Single read result:     " << result << std::endl;
@@ -1130,10 +1109,10 @@ void S7Adapter::createDataPoints()
             tempDP.name = item.name;
             tempDP.timestamp = std::chrono::system_clock::now();
             tempDP.type = S7TypeToString(item.type);
-            tempDP.data = cvrtBytesToType(extractBytes(bufferView, offset, getTypeSize(item.type)), item.type, item.bit);
+            tempDP.data = cvrtBytesToType(extractBytes(bufferView, offset, getItemReadSize(item)), item);
 
             currentDatapPoints.push_back(tempDP);
-            offset += getTypeSize(item.type);
+            offset += getItemReadSize(item);
         }
     }
 }
@@ -1163,23 +1142,23 @@ std::span<const u8> S7Adapter::extractBytes(std::span<const u8> buffer_, u32 off
  * @param bit_
  * @return GenericType
  */
-GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, S7Type type_, u8 bit_)
+GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, const TagItem &item_)
 {
-    size_t size = getTypeSize(type_);
+    size_t size = getItemReadSize(item_);
 
     if (bytes_.size() != size)
     {
         return i32(-1); // ERH
     }
 
-    switch (type_)
+    switch (item_.type)
     {
         // Signle bit
     case S7Type::BOOL:
     {
         u8 raw{};
         std::memcpy(&raw, bytes_.data(), sizeof(raw));
-        return bool((raw & (1 << bit_)) != 0);
+        return bool((raw & (1 << item_.bit)) != 0);
     }
         // Unsigned 1 byte
     case S7Type::BYTE:

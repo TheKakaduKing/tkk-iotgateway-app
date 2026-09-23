@@ -52,6 +52,7 @@ struct TagItem
     u32 number{0};
     S7Type type{0};
     u32 offset{0};
+    u32 length{0};
     u8 bit{0};
 };
 
@@ -119,8 +120,7 @@ private:
     S7Type stringToS7Type(const std::string &type_);
     std::string S7TypeToString(const S7Type type_);
     u32 S5TimeToMilis(const u16 time_);
-    int getTypeSize(S7Type type_);
-    int getTypeDataSize(S7Type type_);
+    int getItemReadSize(const TagItem &item_);
     void setupConnConfig();
     ReadConfigItem createAreaReadConfigItem(const Json &block_);
     std::vector<ReadConfigItem> createSingleReadConfigItem(const Json &block_);
@@ -131,7 +131,7 @@ private:
     void createDataPoints();
 
     std::span<const u8> extractBytes(std::span<const u8> buffer_, u32 offset_, u32 length);
-    GenericType cvrtBytesToType(std::span<const u8> bytes_, S7Type type_, u8 bit_);
+    GenericType cvrtBytesToType(std::span<const u8> bytes_, const TagItem &item_);
 
     std::string latin1ToUtf8(std::span<const u8> bytes_);
     std::string utf16ToUtf8(std::span<const u8> bytes_);
