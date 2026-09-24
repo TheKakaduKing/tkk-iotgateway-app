@@ -47,10 +47,10 @@ void S7Adapter::init()
         exit(1);
     }
     auto test = readData();
-    // DBG_printConfigElements();
+    DBG_printConfigElements();
     createDataPoints();
     std::cout << "Created DPs, size:  " << currentDatapPoints.size() << std::endl;
-    // DBG_printCurrentDPElements();
+    DBG_printCurrentDPElements();
 }
 
 void S7Adapter::postConfigChecks()
@@ -726,13 +726,8 @@ int S7Adapter::getItemReadSize(const TagItem &item_)
         return sizeof(u32);
     }
     case S7Type::LREAL:
-    case S7Type::DT:
     {
         return sizeof(u64);
-    }
-    case S7Type::DTL:
-    {
-        return 12; // 12 byte struct
     }
     case S7Type::STRING:
     {
@@ -872,14 +867,6 @@ S7Type S7Adapter::stringToS7Type(const std::string &type_)
     {
         return S7Type::TOD;
     }
-    if (type_ == "DT")
-    {
-        return S7Type::DT;
-    }
-    if (type_ == "DTL")
-    {
-        return S7Type::DTL;
-    }
     if (type_ == "TIMER")
     {
         return S7Type::TIMER;
@@ -999,16 +986,6 @@ std::string S7Adapter::S7TypeToString(const S7Type type_)
     case S7Type::TOD:
     {
         return "TOD";
-        break;
-    }
-    case S7Type::DT:
-    {
-        return "DT";
-        break;
-    }
-    case S7Type::DTL:
-    {
-        return "DTL";
         break;
     }
     case S7Type::TIMER:
@@ -1195,7 +1172,7 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, const TagItem
     {
         u8 raw{};
         raw = bytes_[0];
-        return (raw & (1 << item_.bit) != 0);
+        return static_cast<bool>((raw & (1 << item_.bit)) != 0);
     }
         // Unsigned 1 byte
     case S7Type::BYTE:
@@ -1270,7 +1247,6 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, const TagItem
     // IEEE Standard 8 byte double
     // Date and Time
     case S7Type::LREAL:
-    case S7Type::DT:
     {
         u64 raw{};
         f64 value{};
@@ -1332,12 +1308,6 @@ GenericType S7Adapter::cvrtBytesToType(std::span<const u8> bytes_, const TagItem
         std::memcpy(&value, &raw, sizeof(value));
         return value;
     }
-    // DTL
-    case S7Type::DTL:
-    {
-        return 5;
-    }
-
     default:
         return i32(-2);
     }
@@ -1486,6 +1456,7 @@ void S7Adapter::DBG_printConfigElements()
             cout << "target:   " << int(t.target) << endl;
             cout << "number:   " << t.number << endl;
             cout << "offset:   " << t.offset << endl;
+            cout << "length:   " << t.length << endl;
             cout << "type:     " << S7TypeToString(t.type) << endl;
             cout << "bit:      " << int(t.bit) << endl;
         }

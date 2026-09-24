@@ -31,8 +31,6 @@ enum class S7Type
     TIME,
     DATE,
     TOD,
-    DT,
-    DTL,
     TIMER,
     COUNTER,
     INVALID,
